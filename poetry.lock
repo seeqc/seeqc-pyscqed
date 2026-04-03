@@ -2028,14 +2028,14 @@ files = [
 
 [[package]]
 name = "networkx"
-version = "3.6.1"
+version = "3.6"
 description = "Python package for creating and manipulating graphs and networks"
 optional = false
-python-versions = "!=3.14.1,>=3.11"
+python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762"},
-    {file = "networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509"},
+    {file = "networkx-3.6-py3-none-any.whl", hash = "sha256:cdb395b105806062473d3be36458d8f1459a4e4b98e236a66c3a48996e07684f"},
+    {file = "networkx-3.6.tar.gz", hash = "sha256:285276002ad1f7f7da0f7b42f004bcba70d381e936559166363707fdad3d72ad"},
 ]
 
 [package.extras]
@@ -3401,5 +3401,5 @@ files = [
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.12,<3.14.1 || >3.14.1,<3.15"
-content-hash = "9111545b8642e438d3396517ae49f5b2e7a29604c2f983d9d4229c6bf7d59eea"
+python-versions = ">=3.12,<3.15"
+content-hash = "118fef81dfc4763fb7c3275e33bc2094729aa1dd1235de1668bac28456056979"
