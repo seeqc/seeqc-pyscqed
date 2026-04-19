@@ -6,7 +6,8 @@ from typing import TypeAlias
 from .parameters import ParamCollection
 
 
-SweepVector: TypeAlias = list[float] | np.ndarray[np.float64]
+SweepVector: TypeAlias = np.ndarray[np.float64]
+ALLOWED_DTYPES = {np.int64, np.float64}
 
 
 class SweepSpec:
@@ -14,12 +15,15 @@ class SweepSpec:
         self._collection = collection
         self._sweep_data: dict[str, SweepVector] = {}
 
-    def add(self, name: str, values: SweepVector):
+    def add(self, name: str, values: list[float] | SweepVector):
         """Adds a sweep dimension with the specified values."""
         if name in self._sweep_data:
             raise ValueError(f"Parameter \"{name}\" is already in the sweep.")
         if name not in self._collection.getParameterNamesList():
             raise ValueError(f"Parameter \"{name}\" is not in the parameter collection.")
+        internal_values = np.array(values)
+        if internal_values.ndim != 1:
+            raise ValueError(f"Parameter \"{name}\" sweep values must be one-dimensional.")
         self._sweep_data[name] = values
 
     def get_total_count(self) -> int:

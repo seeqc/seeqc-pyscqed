@@ -37,3 +37,16 @@ def test_sweep_creation():
         match="Parameter \"C1\" is already in the sweep."
     ):
         sweep.add("C1", points)
+
+    # Cannot add bad values for the sweep
+    with pytest.raises(
+        ValueError,
+        match="Parameter \"L1\" sweep values must be one-dimensional."
+    ):
+        sweep.add("L1", np.linspace(1, 6, 6).reshape(2, 3))
+
+    with pytest.raises(
+        ValueError,
+        match="Parameter \"L1\" sweep values must be one-dimensional."
+    ):
+        sweep.add("L1", [[1, 2], [2, 3]])
