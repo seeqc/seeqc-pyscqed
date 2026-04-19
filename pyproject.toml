@@ -22,6 +22,7 @@ dependencies = [
 coverage = "^7.2.2"
 jupyter = "^1.0.0"
 jupytext = "^1.14.5"
+pytest = "^9.0.3"
 
 [build-system]
 requires = ["poetry-core"]
