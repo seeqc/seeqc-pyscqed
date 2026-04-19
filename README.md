@@ -2,6 +2,7 @@
 
 Critical TODOs:
 - Parameter sweeps should be separated completely from the `NumericalSystem` class. Instead `NumericalSystem` should consume a sweep object and produce a result object.
+- Separate "evaluables" internally and refactor the configuration data into a proper structure.
 - Remove unused and unfinished features (phase slip, flux discretization)
 - Implement the algorithm for block diagonalization (optimal basis representation for node degrees of freedom)
 - Implement system partitioning support
@@ -38,3 +39,7 @@ The best way to get started quickly is to build upon the examples provided in th
 - `resonator-example.py`: In depth analysis of a resonator coupled to a RF-SQUID flux qubit. The resonator dispersive shift, qubit Lamb shift and cavity photon-dependent AC-Stark shift are analysed.
 - `local-basis-example.py`: Here we reduce both a RF-SQUID flux qubit and a Cooper-pair box qubit to the two-level system representation using the local basis reduction technique.
 - `jpsq-example.py`: Simulations of Josephson Phase-Slip Qubits are performed, demonstrating how certain circuit components impact the tunneling interference physics of this device.
+
+## Python Support Policy
+
+We aim to only support python versions that receive bugfix updates, however the lowest supported version will typically linger. This typically means only three minor versions of python are supported.
