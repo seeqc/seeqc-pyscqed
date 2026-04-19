@@ -1,6 +1,7 @@
 import pytest
 
 import numpy as np
+import sympy as sy
 
 from pyscqed.sweep_spec import SweepSpec
 from pyscqed.parameters import ParamCollection
@@ -29,7 +30,7 @@ def test_sweep_creation():
 
     # 1D sweep
     sweep.add("C1", points)
-    assert sweep.get_total_count() == 11
+    assert sweep.getTotalCount() == 11
 
     # Cannot add the same sweep twice
     with pytest.raises(
@@ -58,4 +59,23 @@ def test_sweep_creation():
         sweep.add("L1", ["bad"])
 
     sweep.add("L1", points)
-    assert sweep.get_total_count() == 11**2
+    assert sweep.getTotalCount() == 11**2
+
+
+def test_get_swept_and_static_symbols():
+    names = ["C1", "L1", "I1"]
+    values = [1e-15, 1e-9, 1e-6]
+    collection = create_parameter_collection(names, values)
+    sweep = SweepSpec(collection)
+
+    points = np.linspace(0.0, 1.0, 11)
+    sweep.add("C1", points)
+    sweep.add("L1", points)
+
+    swept_symbols = sweep.getSweptSymbols()
+    static_symbols = sweep.getStaticSymbols()
+    assert len(swept_symbols) == 2
+    assert sy.Symbol("C_{1}") in swept_symbols
+    assert sy.Symbol("L_{1}") in swept_symbols
+    assert len(static_symbols) == 1
+    assert sy.Symbol("I_{1}") in static_symbols
