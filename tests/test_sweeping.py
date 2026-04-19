@@ -56,3 +56,6 @@ def test_sweep_creation():
         match="Parameter \"L1\" sweep values must be of types*"
     ):
         sweep.add("L1", ["bad"])
+
+    sweep.add("L1", points)
+    assert sweep.get_total_count() == 11**2

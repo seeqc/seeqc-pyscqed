@@ -31,4 +31,4 @@ class SweepSpec:
 
     def get_total_count(self) -> int:
         """Gets the total number of sweep points."""
-        return sum(len(value) for value in self._sweep_data.values())
+        return int(np.prod([len(value) for value in self._sweep_data.values()]))
