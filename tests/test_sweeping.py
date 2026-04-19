@@ -23,3 +23,10 @@ def test_sweep_creation():
     points = np.linspace(0.0, 1.0, 11)
     sweep.add("C1", points)
     assert sweep.get_total_count() == 11
+
+    # Cannot add the same sweep twice
+    with pytest.raises(
+        ValueError,
+        match="Parameter \"C1\" is already in the sweep."
+    ):
+        sweep.add("C1", points)
