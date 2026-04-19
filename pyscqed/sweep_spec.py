@@ -18,6 +18,8 @@ class SweepSpec:
         """Adds a sweep dimension with the specified values."""
         if name in self._sweep_data:
             raise ValueError(f"Parameter \"{name}\" is already in the sweep.")
+        if name not in self._collection.getParameterNamesList():
+            raise ValueError(f"Parameter \"{name}\" is not in the parameter collection.")
         self._sweep_data[name] = values
 
     def get_total_count(self) -> int:

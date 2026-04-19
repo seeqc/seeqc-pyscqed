@@ -19,8 +19,15 @@ def test_sweep_creation():
     collection = create_parameter_collection(names, values)
     sweep = SweepSpec(collection)
 
-    # 1D sweep
+    # Cannot add a sweep for a parameter that doesn't exist
     points = np.linspace(0.0, 1.0, 11)
+    with pytest.raises(
+        ValueError,
+        match="Parameter \"C2\" is not in the parameter collection."
+    ):
+        sweep.add("C2", points)
+
+    # 1D sweep
     sweep.add("C1", points)
     assert sweep.get_total_count() == 11
 
