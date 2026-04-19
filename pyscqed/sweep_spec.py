@@ -26,7 +26,6 @@ class SweepSpec:
         internal_values = np.array(values)
         if internal_values.ndim != 1:
             raise ValueError(f"Parameter \"{name}\" sweep values must be one-dimensional.")
-        print(internal_values.dtype)
         if internal_values.dtype.name not in ALLOWED_DTYPES:
             raise TypeError(f"Parameter \"{name}\" sweep values must be of types {ALLOWED_DTYPES}.")
         self._sweep_data[name] = internal_values
