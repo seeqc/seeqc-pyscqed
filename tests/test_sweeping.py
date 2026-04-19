@@ -50,3 +50,9 @@ def test_sweep_creation():
         match="Parameter \"L1\" sweep values must be one-dimensional."
     ):
         sweep.add("L1", [[1, 2], [2, 3]])
+
+    with pytest.raises(
+        TypeError,
+        match="Parameter \"L1\" sweep values must be of types*"
+    ):
+        sweep.add("L1", ["bad"])

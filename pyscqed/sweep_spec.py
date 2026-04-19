@@ -6,8 +6,8 @@ from typing import TypeAlias
 from .parameters import ParamCollection
 
 
-SweepVector: TypeAlias = np.ndarray[np.float64]
-ALLOWED_DTYPES = {np.int64, np.float64}
+SweepVector: TypeAlias = np.ndarray[np.float64 | np.int64]
+ALLOWED_DTYPES = {"int64", "float64"}
 
 
 class SweepSpec:
@@ -24,7 +24,10 @@ class SweepSpec:
         internal_values = np.array(values)
         if internal_values.ndim != 1:
             raise ValueError(f"Parameter \"{name}\" sweep values must be one-dimensional.")
-        self._sweep_data[name] = values
+        print(internal_values.dtype)
+        if internal_values.dtype.name not in ALLOWED_DTYPES:
+            raise TypeError(f"Parameter \"{name}\" sweep values must be of types {ALLOWED_DTYPES}.")
+        self._sweep_data[name] = internal_values
 
     def get_total_count(self) -> int:
         """Gets the total number of sweep points."""
