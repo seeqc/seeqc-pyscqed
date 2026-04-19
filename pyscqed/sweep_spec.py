@@ -2,7 +2,7 @@
 import numpy as np
 import sympy as sy
 
-from typing import TypeAlias
+from typing import TypeAlias, Generator
 
 from .parameters import ParamCollection
 
@@ -69,3 +69,15 @@ class SweepSpec:
         
         non_sweep = list(set(self._collection.getParameterNamesList()) - not_for_presub)
         return self._collection.getSymbolValues(*non_sweep)
+
+    def getGenerator(self) -> Generator[dict[str, np.ndarray[np.float64]], None, None]:
+        point_count = self.getTotalCount()
+        grid = {
+            name: values.flatten() for name, values in 
+            zip(
+                self._sweep_data.keys(),
+                np.meshgrid(*self._sweep_data.values(), indexing="ij")
+            )
+        }
+        for index in range(point_count):
+            yield {name: values[index] for name, values in grid.items()}

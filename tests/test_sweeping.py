@@ -79,3 +79,37 @@ def test_get_swept_and_static_symbols():
     assert sy.Symbol("L_{1}") in swept_symbols
     assert len(static_symbols) == 1
     assert sy.Symbol("I_{1}") in static_symbols
+
+
+def test_sweep_point_generator():
+    names = ["C", "L", "I"]
+    values = [1e-15, 1e-9, 1e-6]
+    collection = create_parameter_collection(names, values)
+    sweep = SweepSpec(collection)
+
+    # The inner-most sweep is the last
+    pts1 = np.linspace(0.0, 1.0, 3)
+    pts2 = np.linspace(2.0, 3.0, 3)
+    pts3 = np.linspace(4.0, 5.0, 3)
+    sweep.add("C", pts1)
+    sweep.add("L", pts2)
+    sweep.add("I", pts3)
+
+    assert sweep.getTotalCount() == 27
+
+    # The first 3 values for L should be 2.0 and the first 6 for C should be 0.0
+    sweep_generator = sweep.getGenerator()
+    for index in range(9):
+        next_values = sweep_generator.send(None)
+        assert next_values["C"] == 0.0
+        if index <= 2:
+            assert next_values["L"] == 2.0
+        elif index > 2 and index <= 5:
+            assert next_values["L"] == 2.5
+        else:
+            assert next_values["L"] == 3.0
+
+    next_values = sweep_generator.send(None)
+    assert next_values["C"] == 0.5
+    assert next_values["L"] == 2.0
+    assert next_values["I"] == 4.0
