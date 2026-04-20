@@ -80,3 +80,7 @@ class SweepSpec:
         }
         for index in range(point_count):
             yield {name: values[index] for name, values in grid.items()}
+
+
+class SweepResult:
+    pass

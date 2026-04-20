@@ -7,10 +7,10 @@ import networkx as nx
 import progress.bar
 import time
 
-from . import dataspec as ds
-from . import symbolic_system as cs
-from . import parameters as pa
-from . import units as un
+from .dataspec import TempData
+from .symbolic_system import SymbolicSystem
+from .sweep_spec import SweepSpec
+from .units import Units
 from . import physical_constants as pc
 from . import util
 from . import units
@@ -19,7 +19,7 @@ from . import units
 _qobj_atol = 1e-12
 
 
-class NumericalSystem(ds.TempData):
+class NumericalSystem(TempData):
     
     ## Mode types
     __mode_types = [
@@ -30,7 +30,7 @@ class NumericalSystem(ds.TempData):
     ]
     
     ## Initialise a Hamiltonian using a circuit specification
-    def __init__(self, symbolic_system, unit=units.Units("CQED1")):
+    def __init__(self, symbolic_system: SymbolicSystem, unit=Units("CQED1")):
         
         # Initialise the temporary data manager
         super().__init__()
@@ -856,6 +856,12 @@ class NumericalSystem(ds.TempData):
     ###################################################################################################################
     #       Parameter Sweep Functions
     ###################################################################################################################
+    
+    def newSweepSpec(self) -> SweepSpec:
+        return SweepSpec(self.SS)
+    
+    def runSweep(self, sweep_spec: SweepSpec) -> SweepResult:
+        pass
     
     def newSweep(self):
         self._init_sweep_data()
