@@ -43,7 +43,6 @@ class SweepSpec:
         for name in self._sweep_data:
             not_for_presub.add(name)
             params = self._collection.getParameterisationsInvolving(name)
-            print(name, ":", params)
             for param in params:
                 successors = self._collection.getParameterisationSuccessors(param)
                 not_for_presub.add(param)
