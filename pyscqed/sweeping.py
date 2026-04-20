@@ -1,4 +1,4 @@
-""""""
+"""Defines the sweeping API"""
 import numpy as np
 import sympy as sy
 
