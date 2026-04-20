@@ -80,6 +80,33 @@ def test_get_swept_and_static_symbols():
     assert len(static_symbols) == 1
     assert sy.Symbol("I_{1}") in static_symbols
 
+    # Test with parameterisations
+    collection.getSymbols("Jc", "Ca", "lse", "l1")
+    collection.getSymbols("alpha", symbol_overrides=[sy.Symbol(r"\alpha")])
+    sym = collection.getSymbolList()
+    lse = sym['lse']
+    l1 = sym['l1']
+    alpha = sym['alpha']
+    Ca = sym['Ca']
+    Jc = sym['Jc']
+    collection.addParameterisation("C1", alpha * lse * l1 * Ca)
+    collection.addParameterisation("I1", alpha * lse * l1 * Jc)
+    sweep = SweepSpec(collection)
+
+    sweep.add("alpha", points)
+    sweep.add("Jc", points)
+
+    swept_symbols = sweep.getSweptSymbols()
+    static_symbols = sweep.getStaticSymbols()
+    assert sy.Symbol(r"\alpha") in swept_symbols
+    assert sy.Symbol("J_{c}") in swept_symbols
+    # These symbols should appear as being swept since they now depend on others that are being swept
+    assert sy.Symbol("C_{1}") in swept_symbols
+    assert sy.Symbol("I_{1}") in swept_symbols
+    assert sy.Symbol("L_{1}") in static_symbols
+    assert sy.Symbol("l_{1}") in static_symbols
+    assert sy.Symbol("l_{se}") in static_symbols
+    assert sy.Symbol("C_{a}") in static_symbols
 
 def test_sweep_point_generator():
     names = ["C", "L", "I"]
