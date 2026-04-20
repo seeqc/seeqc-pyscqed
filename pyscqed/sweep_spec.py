@@ -12,7 +12,7 @@ SweepVector: TypeAlias = np.ndarray[SweepValue]
 ALLOWED_DTYPES = {"int64", "float64"}
 
 
-class SweepSpec:
+class SweepConfig:
     def __init__(self, collection: ParamCollection):
         self._collection = collection
         self._sweep_data: dict[str, SweepVector] = {}

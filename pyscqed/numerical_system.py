@@ -9,7 +9,7 @@ import time
 
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
-from .sweep_spec import SweepSpec
+from .sweep_spec import SweepConfig, SweepResult
 from .units import Units
 from . import physical_constants as pc
 from . import util
@@ -857,10 +857,10 @@ class NumericalSystem(TempData):
     #       Parameter Sweep Functions
     ###################################################################################################################
     
-    def newSweepSpec(self) -> SweepSpec:
-        return SweepSpec(self.SS)
+    def newSweepConfig(self) -> SweepConfig:
+        return SweepConfig(self.SS)
     
-    def runSweep(self, sweep_spec: SweepSpec) -> SweepResult:
+    def runSweep(self, sweep_spec: SweepConfig) -> SweepResult:
         pass
     
     def newSweep(self):

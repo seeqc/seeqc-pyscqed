@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import sympy as sy
 
-from pyscqed.sweep_spec import SweepSpec
+from pyscqed.sweep_spec import SweepConfig
 from pyscqed.parameters import ParamCollection
 
 
@@ -18,7 +18,7 @@ def test_sweep_creation():
     names = ["C1", "L1"]
     values = [1e-15, 1e-9]
     collection = create_parameter_collection(names, values)
-    sweep = SweepSpec(collection)
+    sweep = SweepConfig(collection)
 
     # Cannot add a sweep for a parameter that doesn't exist
     points = np.linspace(0.0, 1.0, 11)
@@ -66,7 +66,7 @@ def test_get_swept_and_static_symbols():
     names = ["C1", "L1", "I1"]
     values = [1e-15, 1e-9, 1e-6]
     collection = create_parameter_collection(names, values)
-    sweep = SweepSpec(collection)
+    sweep = SweepConfig(collection)
 
     points = np.linspace(0.0, 1.0, 11)
     sweep.add("C1", points)
@@ -91,7 +91,7 @@ def test_get_swept_and_static_symbols():
     Jc = sym['Jc']
     collection.addParameterisation("C1", alpha * lse * l1 * Ca)
     collection.addParameterisation("I1", alpha * lse * l1 * Jc)
-    sweep = SweepSpec(collection)
+    sweep = SweepConfig(collection)
 
     sweep.add("alpha", points)
     sweep.add("Jc", points)
@@ -112,7 +112,7 @@ def test_sweep_point_generator():
     names = ["C", "L", "I"]
     values = [1e-15, 1e-9, 1e-6]
     collection = create_parameter_collection(names, values)
-    sweep = SweepSpec(collection)
+    sweep = SweepConfig(collection)
 
     # The inner-most sweep is the last
     pts1 = np.linspace(0.0, 1.0, 3)
