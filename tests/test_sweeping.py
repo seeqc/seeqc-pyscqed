@@ -108,6 +108,7 @@ def test_get_swept_and_static_symbols():
     assert sy.Symbol("l_{se}") in static_symbols
     assert sy.Symbol("C_{a}") in static_symbols
 
+
 def test_sweep_point_generator():
     names = ["C", "L", "I"]
     values = [1e-15, 1e-9, 1e-6]
