@@ -9,7 +9,7 @@ import time
 
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
-from .sweep_spec import SweepConfig, SweepResult
+from .sweeping import SweepConfig, SweepResult
 from .units import Units
 from . import physical_constants as pc
 from . import util

@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import sympy as sy
 
-from pyscqed.sweep_spec import SweepConfig
+from pyscqed.sweeping import SweepConfig
 from pyscqed.parameters import ParamCollection
 
 
