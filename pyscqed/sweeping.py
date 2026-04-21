@@ -35,9 +35,21 @@ class SweepConfig:
             raise TypeError(f"Parameter \"{name}\" sweep values must be of types {ALLOWED_DTYPES}.")
         self._sweep_data[name] = internal_values
 
+    def get(self, name: str) -> SweepVector:
+        """Retrieves a sweep dimension."""
+        return self._sweep_data[name]
+
+    def getDimensionCount(self) -> int:
+        """Gets the number of dimensions in the sweep."""
+        return len(self._sweep_data)
+
     def getTotalCount(self) -> int:
         """Gets the total number of sweep points."""
         return int(np.prod([len(value) for value in self._sweep_data.values()]))
+
+    def getSweepShape(self) -> tuple[int]:
+        """Gets the shape of the sweep dimensions."""
+        return tuple([len(value) for value in self._sweep_data.values()])
 
     def getSweptSymbols(self) -> SweepSubstitution:
         """Returns a symbol value mapping for symbols that will be swept by the current sweep. These will be
@@ -94,15 +106,37 @@ class SweepConfig:
 
 class SweepResult:
     def __init__(self, sweep_config: SweepConfig, data: np.ndarray):
-        self.sweep_config = sweep_config  # TODO: Do we keep a reference to this?
+        self.sweep_config = sweep_config
         self.parameter_axes = sweep_config.getSweepAxes()
         self.data: np.ndarray = data
 
-    def get(self, independent_variable: str) -> np.ndarray:
+    def get(self, independent_variable: str, static_variables: dict[str, SweepValue] | None = None) -> np.ndarray:
+        if static_variables is None:
+            static_variables = {}
+
+        # Check there are enough inputs to retrieve a sweep
+        sweep_dimensions = self.sweep_config.getDimensionCount()
+        if len(static_variables) + 1 != sweep_dimensions:
+            raise ValueError("Insufficient independent and static variables to retrieve sweep result data.")
+
+        # Reshape the data
+        # NOTE: This is unlikely needed when retrieving from files directly to save memory
         data_shape = list(self.data.shape)
-        axis = self.parameter_axes[independent_variable]
+        sweep_shape = list(self.sweep_config.getSweepShape())
+        # Reshape from flattened data: The inner-most dimensions correspond to outputs of evaluated functions, and thus could
+        # be of variable dimensions.
+        reshape_spec = sweep_shape + data_shape[1:]
+        new_data = self.data.reshape(*reshape_spec)
+        
         slices = [slice(None) for _ in range(len(data_shape))]
-        return self.data[*slices].T
+
+        # Construct the slice specification for static variables
+        for param, value in static_variables.items():
+            sweep_vector = self.sweep_config.get(param)
+            value_index = np.argmin(np.abs(sweep_vector - value))
+            slices[self.parameter_axes[param]] = value_index
+        
+        return new_data[*slices].T
 
     @classmethod
     def from_disk_data(cls, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]) -> "SweepResult":
