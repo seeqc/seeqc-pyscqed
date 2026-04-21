@@ -87,14 +87,22 @@ class SweepConfig:
         for index in range(point_count):
             yield {name: values[index] for name, values in grid.items()}
 
+    def getSweepAxes(self) -> dict[str, int]:
+        """Get a parameter axis mapping"""
+        return {param: axis for axis, param in enumerate(self._sweep_data)}
+
 
 class SweepResult:
     def __init__(self, sweep_config: SweepConfig, data: np.ndarray):
-        self.sweep_config = sweep_config
+        self.sweep_config = sweep_config  # TODO: Do we keep a reference to this?
+        self.parameter_axes = sweep_config.getSweepAxes()
         self.data: np.ndarray = data
 
     def get(self, independent_variable: str) -> np.ndarray:
-        return self.data.T
+        data_shape = list(self.data.shape)
+        axis = self.parameter_axes[independent_variable]
+        slices = [slice(None) for _ in range(len(data_shape))]
+        return self.data[*slices].T
 
     @classmethod
     def from_disk_data(cls, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]) -> "SweepResult":
