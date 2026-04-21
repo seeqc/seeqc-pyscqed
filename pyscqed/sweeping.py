@@ -128,7 +128,7 @@ class SweepResult:
         reshape_spec = sweep_shape + data_shape[1:]
         new_data = self.data.reshape(*reshape_spec)
         
-        slices = [slice(None) for _ in range(len(data_shape))]
+        slices = [slice(None)] * len(data_shape)
 
         # Construct the slice specification for static variables
         for param, value in static_variables.items():
