@@ -93,7 +93,7 @@ class SweepConfig:
             name: values.flatten() for name, values in 
             zip(
                 self._sweep_data.keys(),
-                np.meshgrid(*self._sweep_data.values(), indexing="ij")
+                np.meshgrid(*self._sweep_data.values(), indexing="ij", copy=False)
             )
         }
         for index in range(point_count):
@@ -127,7 +127,7 @@ class SweepResult:
         # be of variable dimensions.
         reshape_spec = sweep_shape + data_shape[1:]
         new_data = self.data.reshape(*reshape_spec)
-        
+
         slices = [slice(None)] * len(data_shape)
 
         # Construct the slice specification for static variables
@@ -138,7 +138,8 @@ class SweepResult:
         
         return new_data[*slices].T
 
-    @classmethod
-    def from_disk_data(cls, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]) -> "SweepResult":
+
+class SweepResultFromDisk(SweepResult):
+    def __init__(self, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]):
         data = np.array([pickleRead(file) for file in files])
-        return cls(sweep_config, data)
+        super().__init__(sweep_config, data)

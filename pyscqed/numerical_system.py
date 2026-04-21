@@ -9,7 +9,7 @@ import time
 
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
-from .sweeping import SweepConfig, SweepResult
+from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk
 from .units import Units
 from . import physical_constants as pc
 from . import util
@@ -976,7 +976,7 @@ class NumericalSystem(TempData):
             bar.finish()
 
         assert self.__use_temp
-        return SweepResult.from_disk_data(sweep_config, tmp_results)
+        return SweepResultFromDisk(sweep_config, tmp_results)
     
     def newSweep(self):
         self._init_sweep_data()
