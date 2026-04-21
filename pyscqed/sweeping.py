@@ -1,14 +1,19 @@
 """Defines the sweeping API"""
+import os
+
 import numpy as np
 import sympy as sy
 
 from typing import TypeAlias, Generator
 
 from .parameters import ParamCollection
+from .util import pickleRead
 
 
 SweepValue: TypeAlias = np.float64 | np.int64
+SweepPoint: TypeAlias = dict[str, SweepValue]
 SweepVector: TypeAlias = np.ndarray[SweepValue]
+SweepSubstitution: TypeAlias = dict[sy.Symbol, SweepValue]
 ALLOWED_DTYPES = {"int64", "float64"}
 
 
@@ -34,7 +39,7 @@ class SweepConfig:
         """Gets the total number of sweep points."""
         return int(np.prod([len(value) for value in self._sweep_data.values()]))
 
-    def getSweptSymbols(self) -> dict[sy.Symbol, SweepValue]:
+    def getSweptSymbols(self) -> SweepSubstitution:
         """Returns a symbol value mapping for symbols that will be swept by the current sweep. These will be
         substituted during the sweep runtime.
         """
@@ -51,7 +56,7 @@ class SweepConfig:
         actual_sub_names = list(not_for_presub)
         return self._collection.getSymbolValues(*actual_sub_names)
 
-    def getStaticSymbols(self) -> dict[sy.Symbol, SweepValue]:
+    def getStaticSymbols(self) -> SweepSubstitution:
         """Returns a symbol value mapping for symbols that will not be swept. These are static symbols that
         can be substituted before the sweep runtime.
         """
@@ -69,7 +74,8 @@ class SweepConfig:
         non_sweep = list(set(self._collection.getParameterNamesList()) - not_for_presub)
         return self._collection.getSymbolValues(*non_sweep)
 
-    def getGenerator(self) -> Generator[dict[str, np.ndarray[np.float64]], None, None]:
+    def getGenerator(self) -> Generator[SweepPoint, None, None]:
+        """Create a generator for sweeping all points."""
         point_count = self.getTotalCount()
         grid = {
             name: values.flatten() for name, values in 
@@ -83,4 +89,14 @@ class SweepConfig:
 
 
 class SweepResult:
-    pass
+    def __init__(self, sweep_config: SweepConfig, data: np.ndarray):
+        self.sweep_config = sweep_config
+        self.data: np.ndarray = data
+
+    def get(self, independent_variable: str) -> np.ndarray:
+        return self.data.T
+
+    @classmethod
+    def from_disk_data(cls, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]) -> "SweepResult":
+        data = np.array([pickleRead(file) for file in files])
+        return cls(sweep_config, data)

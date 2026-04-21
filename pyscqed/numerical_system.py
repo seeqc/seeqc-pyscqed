@@ -857,11 +857,126 @@ class NumericalSystem(TempData):
     #       Parameter Sweep Functions
     ###################################################################################################################
     
+    def _perform_pre_sweep_substitutions(self, sweep_config: SweepConfig):
+        # Get the static parameters
+        substitutions = sweep_config.getStaticSymbols()
+
+        # Generate final symbolic expressions
+        self.Cinv_pre = self.SS.getInverseCapacitanceMatrix().subs(substitutions)
+        self.Linv_pre = self.SS.getInverseInductanceMatrix().subs(substitutions)
+
+        # Get branch inverse inductance matrix for branch current calculations
+        self.Linv_b_pre = self.SS.getInverseInductanceMatrix(mode='branch').subs(substitutions)
+        
+        self.Jvec_pre = self.SS.getJosephsonVector().subs(substitutions)
+        self.Pvec_pre = self.SS.getPhaseSlipVector().subs(substitutions)
+        self.Qb_pre = self.SS.getChargeBiasVector().subs(substitutions)
+        self.Qbt_pre = self.SS.Rnb*self.SS.getChargeBiasVector().subs(substitutions)
+        self.Pbm_pre = self.SS.getFluxBiasMatrix(mode="branch").subs(substitutions)
+        self.Pbi_pre = self.SS.getFluxBiasVectorInd().subs(substitutions)
+        
+        # Find which operators will need to be regenerated for each sweep
+        self._get_dynamic_node_dofs(sweep_config)
+    
+    def _get_dynamic_node_dofs(self, sweep_config: SweepConfig):
+        # FIXME: Could identify the precise parameter and where they occur in the sweep to only regenerate when necessary rather than every iteration. This would require _postsub to know which iteration we are at.
+        
+        # Get the parameters that are being swept
+        sweep_syms = set(sweep_config.getSweptSymbols())
+        
+        # For each node:
+        self.regen_nodes = []
+        for node, data in self.operator_data.items():
+            if data["basis"] != "oscillator":
+                continue
+            
+            # Check if those parameters are oscillator impedance parameters
+            if not data["impedance"].free_symbols.isdisjoint(sweep_syms):
+                self.regen_nodes.append(node)
+    
+    def _perform_sweep_point_substitutions(self, sweep_config: SweepConfig):
+        # Get the subs
+        substitutions = sweep_config.getSweptSymbols()
+        
+        # Substitute circuit parameters
+        self.Cinvnp = np.asmatrix(self.Cinv_pre.subs(substitutions), dtype=np.float64)
+        self.Linvnp = np.asmatrix(self.Linv_pre.subs(substitutions), dtype=np.float64)
+        self.Jvecnp = np.asarray(self.Jvec_pre.subs(substitutions), dtype=np.float64)[:, 0]
+        self.Pvecnp = np.asarray(self.Pvec_pre.subs(substitutions), dtype=np.float64)[:, 0]
+        self.Linvnp_b = np.asmatrix(self.Linv_b_pre.subs(substitutions), dtype=np.float64)
+        
+        # Substitute external biases
+        self.Qbnp = np.asmatrix(self.Qb_pre.subs(substitutions), dtype=np.float64) # x 2e
+        self.Qbtnp = np.asmatrix(self.Qbt_pre.subs(substitutions), dtype=np.float64) # x 2e
+        self.Pbsm = np.asmatrix(self.Pbm_pre.subs(substitutions), dtype=np.float64)
+        #self.Pbnp = np.asmatrix(self.Pb_pre.subs(subs), dtype=np.float64) # x Phi0
+        self.Pbinp = np.asmatrix(self.Pbi_pre.subs(substitutions), dtype=np.float64)
+        
+        # Generate exponentiated flux biases
+        Pexp1 = []
+        Pexp2 = []
+        for i in range(self.Pbsm.shape[0]):
+            Pexp1.append(np.exp(2j*np.pi*self.Pbsm[i, i]))
+            Pexp2.append(np.exp(-2j*np.pi*self.Pbsm[i, i]))
+        self.Pexp_pnp = Pexp1
+        self.Pexp_mnp = Pexp2
+        
+        # Generate exponentiated charge biases
+        Qexp1 = []
+        Qexp2 = []
+        for i in range(self.Qbtnp.shape[0]):
+            Qexp1.append(np.exp(2j*np.pi*self.Qbtnp[i, 0]))
+            Qexp2.append(np.exp(-2j*np.pi*self.Qbtnp[i, 0]))
+        self.Qexp_pnp = Qexp1
+        self.Qexp_mnp = Qexp2
+        
+        # Regenerate operators if required
+        if self.regen_nodes != []:
+            self.getExpandedOperatorsMap(self.regen_nodes)
+    
     def newSweepConfig(self) -> SweepConfig:
         return SweepConfig(self.SS)
     
-    def runSweep(self, sweep_spec: SweepConfig) -> SweepResult:
-        pass
+    def runSweep(self, sweep_config: SweepConfig) -> SweepResult:
+        # FIXME: Determine if we should be saving the data to temp files rather than in RAM:
+        # Use the diagonaliser configuration, the requested evaluation functions, and the total number of sweep setpoints that will be used.
+        self.__use_temp = True
+        self._perform_pre_sweep_substitutions(sweep_config)
+
+        # TODO: Implement "evaluables" properly
+        entry = self.__eval_spec["Hamiltonian"]
+        results = []
+        tmp_results = []
+
+        point_gen = sweep_config.getGenerator()
+        with progress.bar.Bar('Solving', check_tty=False, max=sweep_config.getTotalCount()) as bar:
+            for sweep_point in point_gen:
+                # Set the parameter values, this updates the state for the next call to work
+                self.SS.setParameterValues(sweep_point)
+                self._perform_sweep_point_substitutions(sweep_config)
+
+                # Get requested evaluable
+                M = getattr(self, entry['eval'])(**entry['kwargs'])
+                if self.__use_temp:
+                    if entry['diag']:
+                        results = self.diagonalize(M)
+                    else:
+                        results = M
+                else:
+                    if entry['diag']:
+                        results.append(self.diagonalize(M))
+                    else:
+                        results.append(M)
+
+                if self.__use_temp:
+                    # Write to temp file
+                    f = self.writePart(results)
+                    tmp_results.append(f)
+                bar.next()
+            bar.finish()
+
+        assert self.__use_temp
+        return SweepResult.from_disk_data(sweep_config, tmp_results)
     
     def newSweep(self):
         self._init_sweep_data()

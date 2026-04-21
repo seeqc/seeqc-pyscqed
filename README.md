@@ -3,6 +3,7 @@
 Critical TODOs:
 - Parameter sweeps should be separated completely from the `NumericalSystem` class. Instead `NumericalSystem` should consume a sweep object and produce a result object.
 - Separate "evaluables" internally and refactor the configuration data into a proper structure.
+- No longer store simulation state in `NumericalSystem`, use a dedicated datastructure for that.
 - Remove unused and unfinished features (phase slip, flux discretization)
 - Implement the algorithm for block diagonalization (optimal basis representation for node degrees of freedom)
 - Implement system partitioning support

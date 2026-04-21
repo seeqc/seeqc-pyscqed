@@ -20,19 +20,16 @@ def get_numerical_system(graph: CircuitGraph) -> NumericalSystem:
     return NumericalSystem(symbolic)
 
 
-def test_sweep_creation():
+def test_sweep_one_dimensional_run():
     # NOTE: The system simulated here is not configured for generating representative physical results,
     # they are only there to check numerical consistency
     hamil = get_numerical_system(get_single_node_graph())
-    sweep = hamil.newSweepConfig()
     hamil.configureOperator(1, 40, "charge")
     hamil.setParameterValues(
         "C", 20.0, # In fF
         "I", 40e-3, # In uA
         "L", 50.0  # In pH 
     )
-
-    sweep.add("C", np.linspace(20.0, 40.0, 3))
 
     hamil.newSweep()
     hamil.addSweep('C', 20.0, 40.0, 3)
@@ -47,6 +44,8 @@ def test_sweep_creation():
     ]
     x, C, v = hamil.getSweep(sweep, 'C', {})
     assert np.allclose(C, expected_spectrum_sweep, rtol=0, atol=1e-6)
-    print("x =", x)
-    print("C =", C)
-    print("v =", v)
+
+    sweep = hamil.newSweepConfig()
+    sweep.add("C", np.linspace(20.0, 40.0, 3))
+    result = hamil.runSweep(sweep)
+    assert np.allclose(result.get("C"), expected_spectrum_sweep, rtol=0, atol=1e-6)
