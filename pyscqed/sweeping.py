@@ -4,6 +4,7 @@ import os
 import numpy as np
 import sympy as sy
 
+from abc import abstractmethod
 from typing import TypeAlias, Generator
 
 from .parameters import ParamCollection
@@ -120,14 +121,9 @@ class SweepResult:
             raise ValueError("Insufficient independent and static variables to retrieve sweep result data.")
 
         # Reshape the data
-        # NOTE: This is unlikely needed when retrieving from files directly to save memory
-        data_shape = list(self.data.shape)
-        sweep_shape = list(self.sweep_config.getSweepShape())
-        # Reshape from flattened data: The inner-most dimensions correspond to outputs of evaluated functions, and thus could
-        # be of variable dimensions.
-        reshape_spec = sweep_shape + data_shape[1:]
-        new_data = self.data.reshape(*reshape_spec)
+        reshaped_data = self._reshape_data()
 
+        data_shape = list(reshaped_data.shape)
         slices = [slice(None)] * len(data_shape)
 
         # Construct the slice specification for static variables
@@ -136,10 +132,56 @@ class SweepResult:
             value_index = np.argmin(np.abs(sweep_vector - value))
             slices[self.parameter_axes[param]] = value_index
         
-        return new_data[*slices].T
+        #return new_data[*slices].T
+        return self._slice_data(slices, reshaped_data)
+
+    @abstractmethod
+    def _reshape_data(self) -> np.ndarray:
+        pass
+
+    @abstractmethod
+    def _slice_data(self, slices: list[slice], reshaped_data: np.ndarray) -> np.ndarray:
+        pass
+
+
+class SweepResultFromMemory(SweepResult):
+    def __init__(self, sweep_config: SweepConfig, data: np.ndarray):
+        super().__init__(sweep_config, data)
+
+    def _reshape_data(self) -> np.ndarray:
+        data_shape = list(self.data.shape)
+        sweep_shape = list(self.sweep_config.getSweepShape())
+        # Reshape from flattened data: The inner-most dimensions correspond to outputs of evaluated functions, and thus could
+        # be of variable dimensions.
+        reshape_spec = sweep_shape + data_shape[1:]
+        return self.data.reshape(*reshape_spec)
+
+    def _slice_data(self, slices: list[slice], reshaped_data: np.ndarray) -> np.ndarray:
+        return reshaped_data[*slices].T
 
 
 class SweepResultFromDisk(SweepResult):
     def __init__(self, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]):
-        data = np.array([pickleRead(file) for file in files])
+        data = np.array([str(file) for file in files])
         super().__init__(sweep_config, data)
+
+    def _reshape_data(self) -> np.ndarray:
+        sweep_shape = list(self.sweep_config.getSweepShape())
+        return self.data.reshape(*sweep_shape)
+
+    def _slice_data(self, slices: list[slice], reshaped_data: np.ndarray) -> np.ndarray:
+        sliced_data = reshaped_data[*slices]
+        
+        # Determine the data shape in the files
+        # They should all be the same
+        index = [0] * len(sliced_data.shape)
+        file = sliced_data[*index]
+        sample_data = pickleRead(file)
+        file_data_shape = list(sample_data.shape)
+        
+        # Initialize and populated the final data array
+        shape_spec = list(sliced_data.shape) + file_data_shape
+        loaded_array = np.zeros(shape_spec)
+        for index, file in np.ndenumerate(sliced_data):
+            loaded_array[index] = pickleRead(file)
+        return loaded_array.T

@@ -65,15 +65,26 @@ def test_sweep_two_dimensions():
     hamil.addSweep('L', 50.0, 60.0, 2)
     sweep = hamil.paramSweep(timesweep=True)
 
-    expected_spectrum_sweep = [
+    expected_spectrum_sweep1 = [
         [59.95010688, 45.30354992, 36.57241861],
         [219.58210001, 175.64339355, 149.45048272],
         [379.20831265, 305.97937504, 262.32564643],
         [538.82879099, 436.31151958, 375.19792611],
         [698.44358094, 566.63985224, 488.06733808]
     ]
-    x, C, v = hamil.getSweep(sweep, 'C', {"L": 50.0})
-    assert np.allclose(C, expected_spectrum_sweep, rtol=0, atol=1e-6)
+    expected_spectrum_sweep2 = [
+        [53.03927077, 39.66091887, 31.68577904],
+        [198.84901805, 158.71511714, 134.79027614],
+        [344.65184476, 277.7646906, 237.89129967],
+        [490.44781127, 396.80967219, 340.98887104],
+        [636.23697759, 515.85009468, 444.0830116 ]
+    ]
+    
+    x, C1, v = hamil.getSweep(sweep, 'C', {"L": 50.0})
+    assert np.allclose(C1, expected_spectrum_sweep1, rtol=0, atol=1e-6)
+
+    x, C2, v = hamil.getSweep(sweep, 'C', {"L": 60.0})
+    assert np.allclose(C2, expected_spectrum_sweep2, rtol=0, atol=1e-6)
 
     sweep = hamil.newSweepConfig()
     sweep.add("C", np.linspace(20.0, 40.0, 3))
@@ -86,4 +97,5 @@ def test_sweep_two_dimensions():
     ):
         result.get("C")
 
-    assert np.allclose(result.get("C", {"L": 50.0}), expected_spectrum_sweep, rtol=0, atol=1e-6)
+    assert np.allclose(result.get("C", {"L": 50.0}), expected_spectrum_sweep1, rtol=0, atol=1e-6)
+    assert np.allclose(result.get("C", {"L": 60.0}), expected_spectrum_sweep2, rtol=0, atol=1e-6)
