@@ -120,9 +120,16 @@ class SweepResult:
         if len(static_variables) + 1 != sweep_dimensions:
             raise ValueError("Insufficient independent and static variables to retrieve sweep result data.")
 
+        # Check the independent variables exist
+        if independent_variable not in self.parameter_axes:
+            raise ValueError(f"Independent variable \"{independent_variable}\" not present in sweep.")
+
         # Reshape the data
         reshaped_data = self._reshape_data()
 
+        # Construct the slice specification for independent variables
+        # NOTE: By default, all axes have full slice specifications, its the static variables that determine
+        # which slices are constrained
         data_shape = list(reshaped_data.shape)
         slices = [slice(None)] * len(data_shape)
 

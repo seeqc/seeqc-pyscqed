@@ -97,5 +97,18 @@ def test_sweep_two_dimensions():
     ):
         result.get("C")
 
+    with pytest.raises(
+        ValueError,
+        match="Independent variable \"I\" not present in sweep."
+    ):
+        result.get("I", {"L": 50.0})
+
     assert np.allclose(result.get("C", {"L": 50.0}), expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(result.get("C", {"L": 60.0}), expected_spectrum_sweep2, rtol=0, atol=1e-6)
+
+    #print(result.get("I", {"L": 50.0}))
+    return
+
+    # Test multi-dimensional sweep retrieval
+    x, CL, v = hamil.getSweep(sweep, ['C', 'L'], {})
+    print(CL)
