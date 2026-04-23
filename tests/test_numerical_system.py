@@ -106,9 +106,12 @@ def test_sweep_two_dimensions():
     assert np.allclose(result.get("C", {"L": 50.0}), expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(result.get("C", {"L": 60.0}), expected_spectrum_sweep2, rtol=0, atol=1e-6)
 
-    #print(result.get("I", {"L": 50.0}))
-    return
-
     # Test multi-dimensional sweep retrieval
-    x, CL, v = hamil.getSweep(sweep, ['C', 'L'], {})
-    print(CL)
+    CL = result.get(["C", "L"])
+    assert np.allclose(CL[:, 0], expected_spectrum_sweep1, rtol=0, atol=1e-6)
+    assert np.allclose(CL[:, 1], expected_spectrum_sweep2, rtol=0, atol=1e-6)
+
+    # Test that the independent variable input order correctly formats the output
+    CL = result.get(["L", "C"])
+    assert np.allclose(CL[0], expected_spectrum_sweep1, rtol=0, atol=1e-6)
+    assert np.allclose(CL[1], expected_spectrum_sweep2, rtol=0, atol=1e-6)

@@ -111,18 +111,27 @@ class SweepResult:
         self.parameter_axes = sweep_config.getSweepAxes()
         self.data: np.ndarray = data
 
-    def get(self, independent_variable: str, static_variables: dict[str, SweepValue] | None = None) -> np.ndarray:
+    def get(self, independent_variables: str | list[str], static_variables: dict[str, SweepValue] | None = None) -> np.ndarray:
         if static_variables is None:
             static_variables = {}
 
+        independent_vars = None
+        if isinstance(independent_variables, str):
+            independent_vars = [independent_variables]
+        elif isinstance(independent_variables, list):
+            independent_vars = independent_variables
+        else:
+            raise TypeError("independent_variables must be a list[str] or str.")
+
         # Check there are enough inputs to retrieve a sweep
         sweep_dimensions = self.sweep_config.getDimensionCount()
-        if len(static_variables) + 1 != sweep_dimensions:
+        if len(static_variables) + len(independent_vars) != sweep_dimensions:
             raise ValueError("Insufficient independent and static variables to retrieve sweep result data.")
 
         # Check the independent variables exist
-        if independent_variable not in self.parameter_axes:
-            raise ValueError(f"Independent variable \"{independent_variable}\" not present in sweep.")
+        for independent_variable in independent_vars:
+            if independent_variable not in self.parameter_axes:
+                raise ValueError(f"Independent variable \"{independent_variable}\" not present in sweep.")
 
         # Reshape the data
         reshaped_data = self._reshape_data()
@@ -138,9 +147,14 @@ class SweepResult:
             sweep_vector = self.sweep_config.get(param)
             value_index = np.argmin(np.abs(sweep_vector - value))
             slices[self.parameter_axes[param]] = value_index
-        
-        #return new_data[*slices].T
-        return self._slice_data(slices, reshaped_data)
+
+        # Obtain the final result
+        sliced_data = self._slice_data(slices, reshaped_data)
+
+        # Reorder axes
+        new_axes = [self.parameter_axes[independent_var] for independent_var in independent_vars]
+        old_axes = sorted(new_axes)
+        return np.moveaxis(sliced_data, old_axes, new_axes)
 
     @abstractmethod
     def _reshape_data(self) -> np.ndarray:
