@@ -29,7 +29,7 @@ def test_sweep_one_dimension():
     hamil.setParameterValues(
         "C", 20.0, # In fF
         "I", 40e-3, # In uA
-        "L", 50.0  # In pH 
+        "L", 50.0  # In pH
     )
 
     hamil.newSweep()
@@ -46,10 +46,13 @@ def test_sweep_one_dimension():
     x, C, v = hamil.getSweep(sweep, 'C', {})
     assert np.allclose(C, expected_spectrum_sweep, rtol=0, atol=1e-6)
 
+    trace = np.linspace(20.0, 40.0, 3)
     sweep = hamil.newSweepConfig()
-    sweep.add("C", np.linspace(20.0, 40.0, 3))
+    sweep.add("C", trace)
     result = hamil.runSweep(sweep)
-    assert np.allclose(result.get("C"), expected_spectrum_sweep, rtol=0, atol=1e-6)
+    traces, spectrum = result.get("C")
+    assert np.allclose(spectrum, expected_spectrum_sweep, rtol=0, atol=1e-6)
+    assert np.array_equal(traces["C"], trace)
 
 
 def test_sweep_two_dimensions():
@@ -87,8 +90,10 @@ def test_sweep_two_dimensions():
     assert np.allclose(C2, expected_spectrum_sweep2, rtol=0, atol=1e-6)
 
     sweep = hamil.newSweepConfig()
-    sweep.add("C", np.linspace(20.0, 40.0, 3))
-    sweep.add("L", np.linspace(50.0, 60.0, 2))
+    trace1 = np.linspace(20.0, 40.0, 3)
+    trace2 = np.linspace(50.0, 60.0, 2)
+    sweep.add("C", trace1)
+    sweep.add("L", trace2)
     result = hamil.runSweep(sweep)
 
     with pytest.raises(
@@ -103,15 +108,23 @@ def test_sweep_two_dimensions():
     ):
         result.get("I", {"L": 50.0})
 
-    assert np.allclose(result.get("C", {"L": 50.0}), expected_spectrum_sweep1, rtol=0, atol=1e-6)
-    assert np.allclose(result.get("C", {"L": 60.0}), expected_spectrum_sweep2, rtol=0, atol=1e-6)
+    traces1, spectrum1 = result.get("C", {"L": 50.0})
+    traces2, spectrum2 = result.get("C", {"L": 60.0})
+    assert np.allclose(spectrum1, expected_spectrum_sweep1, rtol=0, atol=1e-6)
+    assert np.allclose(spectrum2, expected_spectrum_sweep2, rtol=0, atol=1e-6)
+    assert np.array_equal(traces1["C"], trace1)
+    assert np.array_equal(traces2["C"], trace1)
 
     # Test multi-dimensional sweep retrieval
-    CL = result.get(["C", "L"])
+    traces, CL = result.get(["C", "L"])
     assert np.allclose(CL[:, 0], expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(CL[:, 1], expected_spectrum_sweep2, rtol=0, atol=1e-6)
+    assert np.array_equal(traces["C"][:, 0], trace1)
+    assert np.array_equal(traces["L"][0, :], trace2)
 
     # Test that the independent variable input order correctly formats the output
-    CL = result.get(["L", "C"])
+    traces, CL = result.get(["L", "C"])
     assert np.allclose(CL[0], expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(CL[1], expected_spectrum_sweep2, rtol=0, atol=1e-6)
+    assert np.array_equal(traces["C"][0, :], trace1)
+    assert np.array_equal(traces["L"][:, 0], trace2)

@@ -111,7 +111,17 @@ class SweepResult:
         self.parameter_axes = sweep_config.getSweepAxes()
         self.data: np.ndarray = data
 
-    def get(self, independent_variables: str | list[str], static_variables: dict[str, SweepValue] | None = None) -> np.ndarray:
+    def get(
+        self,
+        independent_variables: str | list[str],
+        static_variables: dict[str, SweepValue] | None = None
+    ) -> tuple[dict[str, np.ndarray], np.ndarray]:
+        """Get the result of a sweep in a specific format, with the accompanying input vectors. The independent
+        variables specify which traces to obtain, and the static variables specify the values of the other swept
+        variables to take the trace along.
+
+        The order of the independent variables affects the order of the result array axes.
+        """
         if static_variables is None:
             static_variables = {}
 
@@ -154,7 +164,7 @@ class SweepResult:
         # Reorder axes
         new_axes = [self.parameter_axes[independent_var] for independent_var in independent_vars]
         old_axes = sorted(new_axes)
-        return np.moveaxis(sliced_data, old_axes, new_axes)
+        return self._construct_input_mesh(independent_vars), np.moveaxis(sliced_data, old_axes, new_axes)
 
     @abstractmethod
     def _reshape_data(self) -> np.ndarray:
@@ -163,6 +173,11 @@ class SweepResult:
     @abstractmethod
     def _slice_data(self, slices: list[slice], reshaped_data: np.ndarray) -> np.ndarray:
         pass
+
+    def _construct_input_mesh(self, independent_variables: list[str]) -> dict[str, np.ndarray]:
+        input_vectors = [self.sweep_config.get(name) for name in independent_variables]
+        mesh = np.meshgrid(*input_vectors, indexing="ij", copy=False)
+        return {name: grid for name, grid in zip(independent_variables, mesh)}
 
 
 class SweepResultFromMemory(SweepResult):
