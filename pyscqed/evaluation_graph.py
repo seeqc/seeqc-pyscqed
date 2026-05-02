@@ -29,7 +29,7 @@ class EvaluationGraph:
 
     def add_dependency(self, source_node: str, target_node: str, preserve_source_outputs: bool = False):
         self._graph.add_edge(source_node, target_node)
-        if preserve_source_outputs:
+        if not preserve_source_outputs:
             self._silent_nodes.add(source_node)
 
     def evaluate(self, inputs: NodeIOData) -> dict[str, Any]:
@@ -44,6 +44,10 @@ class EvaluationGraph:
         while len(next_nodes) > 0:
             data.update(self._get_node_outputs(next_nodes, next_inputs))
             next_nodes, next_inputs = self._get_next_nodes_and_inputs(next_nodes, data)
+
+        # TODO: The silent node data should ideally be dropped in the loop
+        for node in self._silent_nodes:
+            del data[node]
         return data
 
     def _get_node_outputs(self, nodes: list[int], inputs: NodeIOData) -> dict[str, Any]:

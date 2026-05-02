@@ -67,6 +67,7 @@ def test_evaluation_graph_fanout():
     assert result["B"]["final1"] == True
     assert result["C"]["final2"] == 0.0
 
+
 def test_evaluation_dag():
     graph = EvaluationGraph()
     graph.add_node("A", fn=node_test_fn1, outputs=["arg"])
@@ -80,3 +81,20 @@ def test_evaluation_dag():
     }
     with pytest.raises(TypeError, match="The evaluation graph structure is not a DAG."):
         graph.evaluate(inputs=inputs)
+
+
+def test_evaluation_output_preservation():
+    graph = EvaluationGraph()
+    graph.add_node("B", fn=node_test_fn2, outputs=["switch"])
+    graph.add_node("C", fn=node_test_fn4, outputs=["final1", "final2"])
+    graph.add_dependency("B", "C")
+    inputs = {
+        "B": {
+            "arg": 1
+        }
+    }
+
+    result = graph.evaluate(inputs=inputs)
+    assert "B" not in result
+    assert result["C"]["final1"] == 0.0
+    assert result["C"]["final2"] == 1.0
