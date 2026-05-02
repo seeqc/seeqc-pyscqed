@@ -24,10 +24,10 @@ class EvaluationGraph:
         self._graph = nx.DiGraph()
         self._silent_nodes: set[str] = set()
 
-    def add_node(self, name: str, fn: Callable, outputs: list[str]):
+    def addNode(self, name: str, fn: Callable, outputs: list[str]):
         self._graph.add_node(name, node_fn=fn, node_outputs=outputs)
 
-    def add_dependency(self, source_node: str, target_node: str, preserve_source_outputs: bool = False):
+    def addDependency(self, source_node: str, target_node: str, preserve_source_outputs: bool = False):
         self._graph.add_edge(source_node, target_node)
         if not preserve_source_outputs:
             self._silent_nodes.add(source_node)
