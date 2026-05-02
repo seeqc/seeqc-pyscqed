@@ -1,6 +1,9 @@
 """Defines the DAG structure for evaluations."""
-from typing import Callable, Any
+from typing import Callable, Any, TypeAlias
 import networkx as nx
+
+
+NodeIOData: TypeAlias = dict[str, dict[str, Any]]
 
 
 def _define_outputs(fn: Callable, keys: list[str]) -> Callable:
@@ -29,29 +32,17 @@ class EvaluationGraph:
         if preserve_source_outputs:
             self._silent_nodes.add(source_node)
 
-    def evaluate(self, inputs: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    def evaluate(self, inputs: NodeIOData) -> dict[str, Any]:
         # Get the start nodes
-        start_nodes = {node for node in self._graph.nodes if self._graph.in_degree(node) == 0}
-
-        # Produce the outputs of the start nodes
-        data = self._get_node_outputs(start_nodes, inputs)
-
-        # Get next set of nodes
-        next_nodes = set()
-        next_inputs = {}
-        for node in data:
-            node_iter = self._graph.successors(node)
-            for inode in node_iter:
-                next_nodes.add(inode)
-
-                # The outputs of the previous function become the inputs of the next
-                next_inputs[inode] = data[node]
-
-        # Produce the next outputs
-        data.update(self._get_node_outputs(next_nodes, next_inputs))
+        next_nodes = [node for node in self._graph.nodes if self._graph.in_degree(node) == 0]
+        next_inputs = inputs
+        data = {}
+        while len(next_nodes) > 0:
+            data.update(self._get_node_outputs(next_nodes, next_inputs))
+            next_nodes, next_inputs = self._get_next_nodes_and_inputs(next_nodes, data)
         return data
 
-    def _get_node_outputs(self, nodes: set[int], inputs: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    def _get_node_outputs(self, nodes: list[int], inputs: NodeIOData) -> dict[str, Any]:
         data = {}
         for node in nodes:
             original_callable = self._graph.nodes[node]["node_fn"]
@@ -62,3 +53,15 @@ class EvaluationGraph:
             )
             data[node] = wrapped_callable(**inputs[node])
         return data
+
+    def _get_next_nodes_and_inputs(self, start_nodes: list[int], outputs: NodeIOData) -> tuple[list[int], NodeIOData]:
+        next_nodes = []
+        next_inputs = {}
+        for node in start_nodes:
+            node_iter = self._graph.successors(node)
+            for inode in node_iter:
+                next_nodes.append(inode)
+            
+                # The outputs of the previous function become the inputs of the next
+                next_inputs[inode] = outputs[node]
+        return next_nodes, next_inputs
