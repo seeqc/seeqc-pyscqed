@@ -33,6 +33,10 @@ class EvaluationGraph:
             self._silent_nodes.add(source_node)
 
     def evaluate(self, inputs: NodeIOData) -> dict[str, Any]:
+        # Check the graph is a dag
+        if not nx.is_directed_acyclic_graph(self._graph):
+            raise TypeError("The evaluation graph structure is not a DAG.")
+
         # Get the start nodes
         next_nodes = [node for node in self._graph.nodes if self._graph.in_degree(node) == 0]
         next_inputs = inputs

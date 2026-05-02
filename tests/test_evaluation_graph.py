@@ -20,7 +20,7 @@ def node_test_fn4(switch: bool) -> tuple[float, float]:
     return 1.0, 0.0
 
 
-def test_evaluation_graph_output_preservation():
+def test_evaluation_graph_series_nodes():
     graph = EvaluationGraph()
     graph.add_node("A", fn=node_test_fn1, outputs=["arg"])
     graph.add_node("B", fn=node_test_fn2, outputs=["switch"])
@@ -66,3 +66,17 @@ def test_evaluation_graph_fanout():
     assert result["A"]["arg"] == 1
     assert result["B"]["final1"] == True
     assert result["C"]["final2"] == 0.0
+
+def test_evaluation_dag():
+    graph = EvaluationGraph()
+    graph.add_node("A", fn=node_test_fn1, outputs=["arg"])
+    graph.add_node("B", fn=node_test_fn2, outputs=["final1"])
+    graph.add_dependency("A", "B")
+    graph.add_dependency("B", "A")
+    inputs = {
+        "A": {
+            "input": 1
+        }
+    }
+    with pytest.raises(TypeError, match="The evaluation graph structure is not a DAG."):
+        graph.evaluate(inputs=inputs)
