@@ -38,7 +38,7 @@ class EvaluationGraph:
             raise TypeError("The evaluation graph structure is not a DAG.")
 
         # Get the start nodes
-        next_nodes = [node for node in self._graph.nodes if self._graph.in_degree(node) == 0]
+        next_nodes = self._get_start_nodes()
         next_inputs = inputs
         data = {}
         while len(next_nodes) > 0:
@@ -50,7 +50,13 @@ class EvaluationGraph:
             del data[node]
         return data
 
-    def _get_node_outputs(self, nodes: list[int], inputs: NodeIOData) -> dict[str, Any]:
+    def getDefaultInputs(self) -> NodeIOData:
+        return {node: {} for node in self._get_start_nodes()}
+
+    def _get_start_nodes(self) -> list[str]:
+        return [node for node in self._graph.nodes if self._graph.in_degree(node) == 0]
+
+    def _get_node_outputs(self, nodes: list[str], inputs: NodeIOData) -> dict[str, Any]:
         data = {}
         for node in nodes:
             original_callable = self._graph.nodes[node]["node_fn"]
@@ -62,7 +68,7 @@ class EvaluationGraph:
             data[node] = wrapped_callable(**inputs[node])
         return data
 
-    def _get_next_nodes_and_inputs(self, start_nodes: list[int], outputs: NodeIOData) -> tuple[list[int], NodeIOData]:
+    def _get_next_nodes_and_inputs(self, start_nodes: list[str], outputs: NodeIOData) -> tuple[list[str], NodeIOData]:
         next_nodes = []
         next_inputs = {}
         for node in start_nodes:
