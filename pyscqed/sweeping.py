@@ -8,6 +8,7 @@ from abc import abstractmethod
 from typing import TypeAlias, Generator
 
 from .parameters import ParamCollection
+from .evaluation_graph import EvaluationGraph
 from .util import pickleRead
 
 
@@ -22,6 +23,7 @@ class SweepConfig:
     def __init__(self, collection: ParamCollection):
         self._collection = collection
         self._sweep_data: dict[str, SweepVector] = {}
+        self._evaluation_graph: EvaluationGraph | None = None
 
     def add(self, name: str, values: list[float] | SweepVector):
         """Adds a sweep dimension with the specified values."""
@@ -39,6 +41,14 @@ class SweepConfig:
     def get(self, name: str) -> SweepVector:
         """Retrieves a sweep dimension."""
         return self._sweep_data[name]
+
+    def setEvaluationGraph(self, graph: EvaluationGraph):
+        """Sets the evaluation graph for this sweep."""
+        self._evaluation_graph = graph
+
+    def getEvaluationGraph(self) -> EvaluationGraph | None:
+        """Gets the evaluation graph."""
+        return self._evaluation_graph
 
     def getDimensionCount(self) -> int:
         """Gets the number of dimensions in the sweep."""
@@ -215,7 +225,7 @@ class SweepResultFromDisk(SweepResult):
         sample_data = pickleRead(file)
         file_data_shape = list(sample_data.shape)
         
-        # Initialize and populated the final data array
+        # Initialize and populate the final data array
         shape_spec = list(sliced_data.shape) + file_data_shape
         loaded_array = np.zeros(shape_spec)
         for index, file in np.ndenumerate(sliced_data):
