@@ -2,6 +2,8 @@
 from typing import Callable, Any, TypeAlias
 import networkx as nx
 
+from .result import EvaluationResult
+
 
 NodeIOData: TypeAlias = dict[str, dict[str, Any]]
 
@@ -32,7 +34,7 @@ class EvaluationGraph:
         if not preserve_source_outputs:
             self._silent_nodes.add(source_node)
 
-    def evaluate(self, inputs: NodeIOData) -> dict[str, Any]:
+    def evaluate(self, inputs: NodeIOData) -> EvaluationResult:
         # Check the graph is a dag
         if not nx.is_directed_acyclic_graph(self._graph):
             raise TypeError("The evaluation graph structure is not a DAG.")
@@ -48,7 +50,7 @@ class EvaluationGraph:
         # TODO: The silent node data should ideally be dropped in the loop
         for node in self._silent_nodes:
             del data[node]
-        return data
+        return EvaluationResult(data=data)
 
     def getDefaultInputs(self) -> NodeIOData:
         return {node: {} for node in self._get_start_nodes()}
@@ -56,7 +58,7 @@ class EvaluationGraph:
     def _get_start_nodes(self) -> list[str]:
         return [node for node in self._graph.nodes if self._graph.in_degree(node) == 0]
 
-    def _get_node_outputs(self, nodes: list[str], inputs: NodeIOData) -> dict[str, Any]:
+    def _get_node_outputs(self, nodes: list[str], inputs: NodeIOData) -> NodeIOData:
         data = {}
         for node in nodes:
             original_callable = self._graph.nodes[node]["node_fn"]

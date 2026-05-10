@@ -33,10 +33,10 @@ def test_evaluation_graph_series_nodes():
         }
     }
     result = graph.evaluate(inputs=inputs)
-    assert result["A"]["arg"] == 1
-    assert result["B"]["switch"] == True
-    assert result["C"]["final1"] == 0.0
-    assert result["C"]["final2"] == 1.0
+    assert result.data["A"]["arg"] == 1
+    assert result.data["B"]["switch"] == True
+    assert result.data["C"]["final1"] == 0.0
+    assert result.data["C"]["final2"] == 1.0
 
     inputs = {
         "A": {
@@ -44,10 +44,10 @@ def test_evaluation_graph_series_nodes():
         }
     }
     result = graph.evaluate(inputs=inputs)
-    assert result["A"]["arg"] == 0
-    assert result["B"]["switch"] == False
-    assert result["C"]["final1"] == 1.0
-    assert result["C"]["final2"] == 0.0
+    assert result.data["A"]["arg"] == 0
+    assert result.data["B"]["switch"] == False
+    assert result.data["C"]["final1"] == 1.0
+    assert result.data["C"]["final2"] == 0.0
 
 
 def test_evaluation_graph_fanout():
@@ -63,9 +63,9 @@ def test_evaluation_graph_fanout():
         }
     }
     result = graph.evaluate(inputs=inputs)
-    assert result["A"]["arg"] == 1
-    assert result["B"]["final1"] == True
-    assert result["C"]["final2"] == 0.0
+    assert result.data["A"]["arg"] == 1
+    assert result.data["B"]["final1"] == True
+    assert result.data["C"]["final2"] == 0.0
 
 
 def test_evaluation_dag():
@@ -95,6 +95,6 @@ def test_evaluation_output_preservation():
     }
 
     result = graph.evaluate(inputs=inputs)
-    assert "B" not in result
-    assert result["C"]["final1"] == 0.0
-    assert result["C"]["final2"] == 1.0
+    assert "B" not in result.data
+    assert result.data["C"]["final1"] == 0.0
+    assert result.data["C"]["final2"] == 1.0
