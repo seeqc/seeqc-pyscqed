@@ -10,6 +10,8 @@ import time
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
 from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk
+from .evaluation_graph import EvaluationGraph
+from .result import EigenvalueResult, EigenvectorResult, FunctionResult
 from .units import Units
 from . import physical_constants as pc
 from . import util
@@ -17,6 +19,14 @@ from . import units
 
 # Local override for the Qobj tolerance. The global settings appear to not work
 _qobj_atol = 1e-12
+
+
+class HamiltonianSpectrum(EvaluationGraph):
+    def __init__(self, nsys: "NumericalSystem"):
+        super().__init__()
+        self.addNode("Hamiltonian", fn=nsys.getHamiltonian, outputs=["qobj"])
+        self.addNode("Spectrum", fn=nsys.diagonalize, outputs=["E"])
+        self.addDependency("Hamiltonian", "Spectrum")
 
 
 class NumericalSystem(TempData):
@@ -506,7 +516,7 @@ class NumericalSystem(TempData):
         "JosephsonEnergy":    {'eval': 'getJosephsonEnergies', 'diag': False, 'depends': None, 'kwargs': {}}
     }
     
-    def getHamiltonian(self):
+    def getHamiltonian(self) -> qt.Qobj:
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
         util.mdot((self.Qnp + self.Qbnp).T, self.Cinvnp, self.Qnp + self.Qbnp)[0, 0]
@@ -593,7 +603,7 @@ class NumericalSystem(TempData):
         # Total Hamiltonian
         return (Hq + Hf + Hj + Hp).tidyup(_qobj_atol)
     
-    def getCurrentOperator(self, edge=None):
+    def getCurrentOperator(self, edge=None) -> qt.Qobj:
         # Check edge
         if edge is None:
             raise Exception("No edge specified for branch current operator.")
@@ -653,7 +663,7 @@ class NumericalSystem(TempData):
         else:
             raise Exception("Edge %s is not current-carrying" % repr(edge))
     
-    def getCurrentMatrixElement(self, E, V, edge=None, elements=None):
+    def getCurrentMatrixElement(self, E, V, edge=None, elements=None) -> float:
         # Get the relevant operator
         Iop = self.getCurrentOperator(edge=edge)
         
@@ -752,10 +762,9 @@ class NumericalSystem(TempData):
         E = E - E[0]
         tmax = len(E)
         nmax = nmax + 1 + tmax
-        norm = Op.matrix_element(V[0], V[1])#(V[0].dag()*Op*V[1])[0][0][0]
+        norm = Op.matrix_element(V[0], V[1])
         g_list = []
         for i in range(tmax-1):
-            #g_list.append((V[i].dag()*Op*V[i+1])[0][0][0])
             g_list.append(Op.matrix_element(V[i], V[i+1]))
         
         # Apply the circuit derived prefactor
@@ -806,8 +815,11 @@ class NumericalSystem(TempData):
     def getDiagConfig(self):
         return self.diagonalizer_config
     
-    def diagonalize(self, M):
-        return self.diagonalizer_config['func'](M, **self.diagonalizer_config['kwargs'])
+    def diagonalize(self, qobj: qt.Qobj) -> tuple[EigenvalueResult, EigenvectorResult | None]:
+        result = self.diagonalizer_config['func'](qobj, **self.diagonalizer_config['kwargs'])
+        if self.diagonalizer_config["kwargs"]["get_vectors"]:
+            return EigenvalueResult(data=result[0]), EigenvectorResult(data=result[1])
+        return EigenvalueResult(data=result), None
     
     ###################################################################################################################
     #       Parameter Collection Wrapper Functions and Extended Functions
@@ -935,7 +947,10 @@ class NumericalSystem(TempData):
             self.getExpandedOperatorsMap(self.regen_nodes)
     
     def newSweepConfig(self) -> SweepConfig:
-        return SweepConfig(self.SS)
+        config = SweepConfig(self.SS)
+        # Default evaluation graph
+        config.setEvaluationGraph(HamiltonianSpectrum(self))
+        return config
     
     def runSweep(self, sweep_config: SweepConfig) -> SweepResult:
         # FIXME: Determine if we should be saving the data to temp files rather than in RAM:
@@ -943,8 +958,10 @@ class NumericalSystem(TempData):
         self.__use_temp = True
         self._perform_pre_sweep_substitutions(sweep_config)
 
-        # TODO: Implement "evaluables" properly
-        entry = self.__eval_spec["Hamiltonian"]
+        evaluation_graph = sweep_config.getEvaluationGraph()
+        if evaluation_graph is None:
+            raise RuntimeError("An evaluation graph must be set.")
+
         results = []
         tmp_results = []
 
@@ -955,22 +972,13 @@ class NumericalSystem(TempData):
                 self.SS.setParameterValues(sweep_point)
                 self._perform_sweep_point_substitutions(sweep_config)
 
-                # Get requested evaluable
-                M = getattr(self, entry['eval'])(**entry['kwargs'])
-                if self.__use_temp:
-                    if entry['diag']:
-                        results = self.diagonalize(M)
-                    else:
-                        results = M
-                else:
-                    if entry['diag']:
-                        results.append(self.diagonalize(M))
-                    else:
-                        results.append(M)
+                # Compute evaluation graph
+                default_inputs = evaluation_graph.getDefaultInputs()
+                result = evaluation_graph.evaluate(default_inputs)
 
                 if self.__use_temp:
                     # Write to temp file
-                    f = self.writePart(results)
+                    f = self.writePart(result)
                     tmp_results.append(f)
                 bar.next()
             bar.finish()

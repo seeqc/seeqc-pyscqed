@@ -10,8 +10,10 @@ from typing import TypeAlias, Generator
 from .parameters import ParamCollection
 from .evaluation_graph import EvaluationGraph
 from .util import pickleRead
+from .result import SweepNumericalResult
 
 
+EvaluationOutput: TypeAlias = tuple[str, str]
 SweepValue: TypeAlias = np.float64 | np.int64
 SweepPoint: TypeAlias = dict[str, SweepValue]
 SweepVector: TypeAlias = np.ndarray[SweepValue]
@@ -124,8 +126,9 @@ class SweepResult:
     def get(
         self,
         independent_variables: str | list[str],
-        static_variables: dict[str, SweepValue] | None = None
-    ) -> tuple[dict[str, np.ndarray], np.ndarray]:
+        static_variables: dict[str, SweepValue] | None = None,
+        eval_outputs: list[EvaluationOutput] = [("Spectrum", "E")]
+    ) -> tuple[dict[str, np.ndarray], SweepNumericalResult]:
         """Get the result of a sweep in a specific format, with the accompanying input vectors. The independent
         variables specify which traces to obtain, and the static variables specify the values of the other swept
         variables to take the trace along.
@@ -169,19 +172,35 @@ class SweepResult:
             slices[self.parameter_axes[param]] = value_index
 
         # Obtain the final result
-        sliced_data = self._slice_data(slices, reshaped_data)
+        return (
+            self._construct_input_mesh(independent_vars),
+            self._slice_data(slices, reshaped_data, eval_outputs, independent_vars)
+        )
 
-        # Reorder axes
-        new_axes = [self.parameter_axes[independent_var] for independent_var in independent_vars]
-        old_axes = sorted(new_axes)
-        return self._construct_input_mesh(independent_vars), np.moveaxis(sliced_data, old_axes, new_axes)
+    def get_numerical(
+        self,
+        independent_variables: str | list[str],
+        static_variables: dict[str, SweepValue] | None = None,
+        eval_output: EvaluationOutput = ("Spectrum", "E")
+    ) -> tuple[dict[str, np.ndarray], np.ndarray]:
+        """Get a raw (numpy) numerical result from this sweep result. This call can only retrieve a single
+        evaluation output.
+        """
+        mesh, result = self.get(independent_variables, static_variables, [eval_output])
+        return mesh, result[eval_output]
 
     @abstractmethod
     def _reshape_data(self) -> np.ndarray:
         pass
 
     @abstractmethod
-    def _slice_data(self, slices: list[slice], reshaped_data: np.ndarray) -> np.ndarray:
+    def _slice_data(
+        self,
+        slices: list[slice],
+        reshaped_data: np.ndarray,
+        eval_outputs: list[EvaluationOutput],
+        independent_vars: list[str]
+    ) -> SweepNumericalResult:
         pass
 
     def _construct_input_mesh(self, independent_variables: list[str]) -> dict[str, np.ndarray]:
@@ -202,8 +221,14 @@ class SweepResultFromMemory(SweepResult):
         reshape_spec = sweep_shape + data_shape[1:]
         return self.data.reshape(*reshape_spec)
 
-    def _slice_data(self, slices: list[slice], reshaped_data: np.ndarray) -> np.ndarray:
-        return reshaped_data[*slices].T
+    def _slice_data(
+        self,
+        slices: list[slice],
+        reshaped_data: np.ndarray,
+        eval_outputs: list[EvaluationOutput],
+        independent_vars: list[str]
+    ) -> SweepNumericalResult:
+        return reshaped_data[*slices]
 
 
 class SweepResultFromDisk(SweepResult):
@@ -215,19 +240,44 @@ class SweepResultFromDisk(SweepResult):
         sweep_shape = list(self.sweep_config.getSweepShape())
         return self.data.reshape(*sweep_shape)
 
-    def _slice_data(self, slices: list[slice], reshaped_data: np.ndarray) -> np.ndarray:
+    def _slice_data(
+        self,
+        slices: list[slice],
+        reshaped_data: np.ndarray,
+        eval_outputs: list[EvaluationOutput],
+        independent_vars: list[str]
+    ) -> SweepNumericalResult:
         sliced_data = reshaped_data[*slices]
-        
+
         # Determine the data shape in the files
         # They should all be the same
         index = [0] * len(sliced_data.shape)
         file = sliced_data[*index]
-        sample_data = pickleRead(file)
-        file_data_shape = list(sample_data.shape)
-        
+        eval_result = pickleRead(file)
+        eval_source = eval_result.source
+        eval_keys = eval_result.get_keys()
+        if not all(eval_key in eval_keys for eval_key in eval_outputs):
+            raise ValueError("A specified evaluation key cannot be found in the result data.")
+
+        # Determine the axis reordering based on the user independent variables order
+        new_axes = [self.parameter_axes[independent_var] for independent_var in independent_vars]
+        old_axes = sorted(new_axes)
+
         # Initialize and populate the final data array
-        shape_spec = list(sliced_data.shape) + file_data_shape
-        loaded_array = np.zeros(shape_spec)
+        loaded_arrays = {}
+        for eval_key in eval_outputs:
+            node = eval_key[0]
+            output = eval_key[1]
+            sample_data = eval_result.data[node][output].data
+            file_data_shape = list(sample_data.shape)
+            shape_spec = list(sliced_data.shape) + file_data_shape
+            loaded_arrays[eval_key] = np.zeros(shape_spec)
         for index, file in np.ndenumerate(sliced_data):
-            loaded_array[index] = pickleRead(file)
-        return loaded_array.T
+            eval_result = pickleRead(file)
+            for node, output in eval_outputs:
+                loaded_arrays[(node, output)][index] = eval_result.data[node][output].data
+
+        return SweepNumericalResult(
+            data={key: np.moveaxis(value, old_axes, new_axes) for key, value in loaded_arrays.items()},
+            source=eval_source
+        )
