@@ -201,16 +201,6 @@ class SweepResult:
         return self.data.reshape(*sweep_shape)
 
     @abstractmethod
-    def _slice_data(
-        self,
-        slices: list[slice],
-        reshaped_data: np.ndarray,
-        eval_outputs: list[EvaluationOutput],
-        independent_vars: list[str]
-    ) -> SweepNumericalResult:
-        pass
-
-    @abstractmethod
     def _retrieve_data(self, source: Any) -> EvaluationResult:
         pass
 
