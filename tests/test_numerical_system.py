@@ -50,8 +50,14 @@ def test_sweep_one_dimension():
     trace = np.linspace(20.0, 40.0, 3)
     sweep = hamil.newSweepConfig()
     sweep.add("C", trace)
-    result = hamil.runSweep(sweep)
-    traces, spectrum = result.getNumerical("C")
+
+    result_disk = hamil.runSweep(sweep)
+    traces, spectrum = result_disk.getNumerical("C")
+    assert np.allclose(spectrum.T, expected_spectrum_sweep, rtol=0, atol=1e-6)
+    assert np.array_equal(traces["C"], trace)
+
+    result_mem = hamil.runSweep(sweep, use_disk=False)
+    traces, spectrum = result_mem.getNumerical("C")
     assert np.allclose(spectrum.T, expected_spectrum_sweep, rtol=0, atol=1e-6)
     assert np.array_equal(traces["C"], trace)
 
@@ -125,6 +131,13 @@ def test_sweep_two_dimensions():
 
     # Test that the independent variable input order correctly formats the output
     traces, CL = result.getNumerical(["L", "C"])
+    assert np.allclose(CL[0].T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
+    assert np.allclose(CL[1].T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
+    assert np.array_equal(traces["C"][0, :], trace1)
+    assert np.array_equal(traces["L"][:, 0], trace2)
+
+    result_mem = hamil.runSweep(sweep, use_disk=False)
+    traces, CL = result_mem.getNumerical(["L", "C"])
     assert np.allclose(CL[0].T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(CL[1].T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
     assert np.array_equal(traces["C"][0, :], trace1)

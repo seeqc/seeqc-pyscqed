@@ -9,7 +9,7 @@ import time
 
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
-from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk
+from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk, SweepResultFromMemory
 from .evaluation_graph import EvaluationGraph
 from .result import EigenvalueResult, EigenvectorResult, FunctionResult
 from .units import Units
@@ -877,6 +877,46 @@ class NumericalSystem(TempData):
     ###################################################################################################################
     #       Parameter Sweep Functions
     ###################################################################################################################
+    def newSweepConfig(self) -> SweepConfig:
+        config = SweepConfig(self.SS)
+        # Default evaluation graph
+        config.setEvaluationGraph(HamiltonianSpectrum(self))
+        return config
+    
+    def runSweep(self, sweep_config: SweepConfig, use_disk: bool = True) -> SweepResult:
+        # FIXME: Determine if we should be saving the data to temp files rather than in RAM:
+        # Use the diagonaliser configuration, the requested evaluation functions, and the total number of sweep setpoints that will be used.
+        self._perform_pre_sweep_substitutions(sweep_config)
+
+        evaluation_graph = sweep_config.getEvaluationGraph()
+        if evaluation_graph is None:
+            raise RuntimeError("An evaluation graph must be set.")
+
+        results = []
+        point_gen = sweep_config.getGenerator()
+        with progress.bar.Bar('Solving', check_tty=False, max=sweep_config.getTotalCount()) as bar:
+            for sweep_point in point_gen:
+                # Set the parameter values, this updates the state for the next call to work
+                self.SS.setParameterValues(sweep_point)
+                self._perform_sweep_point_substitutions(sweep_config)
+
+                # Compute evaluation graph
+                default_inputs = evaluation_graph.getDefaultInputs()
+                result = evaluation_graph.evaluate(default_inputs)
+
+                if use_disk:
+                    # Write to temp file
+                    f = self.writePart(result)
+                    results.append(f)
+                else:
+                    results.append(result)
+                bar.next()
+            bar.finish()
+
+        if use_disk:
+            return SweepResultFromDisk(sweep_config, results)
+        else:
+            return SweepResultFromMemory(sweep_config, results)
     
     def _perform_pre_sweep_substitutions(self, sweep_config: SweepConfig):
         # Get the static parameters
@@ -954,47 +994,7 @@ class NumericalSystem(TempData):
         # Regenerate operators if required
         if self.regen_nodes != []:
             self.getExpandedOperatorsMap(self.regen_nodes)
-    
-    def newSweepConfig(self) -> SweepConfig:
-        config = SweepConfig(self.SS)
-        # Default evaluation graph
-        config.setEvaluationGraph(HamiltonianSpectrum(self))
-        return config
-    
-    def runSweep(self, sweep_config: SweepConfig) -> SweepResult:
-        # FIXME: Determine if we should be saving the data to temp files rather than in RAM:
-        # Use the diagonaliser configuration, the requested evaluation functions, and the total number of sweep setpoints that will be used.
-        self.__use_temp = True
-        self._perform_pre_sweep_substitutions(sweep_config)
 
-        evaluation_graph = sweep_config.getEvaluationGraph()
-        if evaluation_graph is None:
-            raise RuntimeError("An evaluation graph must be set.")
-
-        results = []
-        tmp_results = []
-
-        point_gen = sweep_config.getGenerator()
-        with progress.bar.Bar('Solving', check_tty=False, max=sweep_config.getTotalCount()) as bar:
-            for sweep_point in point_gen:
-                # Set the parameter values, this updates the state for the next call to work
-                self.SS.setParameterValues(sweep_point)
-                self._perform_sweep_point_substitutions(sweep_config)
-
-                # Compute evaluation graph
-                default_inputs = evaluation_graph.getDefaultInputs()
-                result = evaluation_graph.evaluate(default_inputs)
-
-                if self.__use_temp:
-                    # Write to temp file
-                    f = self.writePart(result)
-                    tmp_results.append(f)
-                bar.next()
-            bar.finish()
-
-        assert self.__use_temp
-        return SweepResultFromDisk(sweep_config, tmp_results)
-    
     def newSweep(self):
         self._init_sweep_data()
     

@@ -5,12 +5,12 @@ import numpy as np
 import sympy as sy
 
 from abc import abstractmethod
-from typing import TypeAlias, Generator
+from typing import TypeAlias, Generator, Any
 
 from .parameters import ParamCollection
 from .evaluation_graph import EvaluationGraph
 from .util import pickleRead
-from .result import SweepNumericalResult, NumericalResult
+from .result import SweepNumericalResult, NumericalResult, EvaluationResult
 
 
 EvaluationOutput: TypeAlias = tuple[str, str]
@@ -196,9 +196,9 @@ class SweepResult:
         mesh, result = self.get(independent_variables, static_variables, [eval_output])
         return mesh, result[eval_output]
 
-    @abstractmethod
     def _reshape_data(self) -> np.ndarray:
-        pass
+        sweep_shape = list(self.sweep_config.getSweepShape())
+        return self.data.reshape(*sweep_shape)
 
     @abstractmethod
     def _slice_data(
@@ -208,44 +208,16 @@ class SweepResult:
         eval_outputs: list[EvaluationOutput],
         independent_vars: list[str]
     ) -> SweepNumericalResult:
+        pass
+
+    @abstractmethod
+    def _retrieve_data(self, source: Any) -> EvaluationResult:
         pass
 
     def _construct_input_mesh(self, independent_variables: list[str]) -> dict[str, np.ndarray]:
         input_vectors = [self.sweep_config.get(name) for name in independent_variables]
         mesh = np.meshgrid(*input_vectors, indexing="ij", copy=False)
         return {name: grid for name, grid in zip(independent_variables, mesh)}
-
-
-class SweepResultFromMemory(SweepResult):
-    def __init__(self, sweep_config: SweepConfig, data: np.ndarray):
-        super().__init__(sweep_config, data)
-
-    def _reshape_data(self) -> np.ndarray:
-        data_shape = list(self.data.shape)
-        sweep_shape = list(self.sweep_config.getSweepShape())
-        # Reshape from flattened data: The inner-most dimensions correspond to outputs of evaluated functions, and thus could
-        # be of variable dimensions.
-        reshape_spec = sweep_shape + data_shape[1:]
-        return self.data.reshape(*reshape_spec)
-
-    def _slice_data(
-        self,
-        slices: list[slice],
-        reshaped_data: np.ndarray,
-        eval_outputs: list[EvaluationOutput],
-        independent_vars: list[str]
-    ) -> SweepNumericalResult:
-        return reshaped_data[*slices]
-
-
-class SweepResultFromDisk(SweepResult):
-    def __init__(self, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]):
-        data = np.array([str(file) for file in files])
-        super().__init__(sweep_config, data)
-
-    def _reshape_data(self) -> np.ndarray:
-        sweep_shape = list(self.sweep_config.getSweepShape())
-        return self.data.reshape(*sweep_shape)
 
     def _slice_data(
         self,
@@ -259,8 +231,7 @@ class SweepResultFromDisk(SweepResult):
         # Determine the data shape in the files
         # They should all be the same
         index = [0] * len(sliced_data.shape)
-        file = sliced_data[*index]
-        eval_result = pickleRead(file)
+        eval_result = self._retrieve_data(sliced_data[*index])
         eval_source = eval_result.source
         eval_keys = eval_result.getKeys()
         if not all(eval_key in eval_keys for eval_key in eval_outputs):
@@ -289,8 +260,8 @@ class SweepResultFromDisk(SweepResult):
                 shape_spec = list(sliced_data.shape)
                 loaded_arrays[eval_key] = np.zeros(shape_spec)
 
-        for index, file in np.ndenumerate(sliced_data):
-            eval_result = pickleRead(file)
+        for index, data_source in np.ndenumerate(sliced_data):
+            eval_result = self._retrieve_data(data_source)
             for node, output in eval_outputs:
                 raw_data = eval_result.data[node][output]
                 if isinstance(raw_data, NumericalResult):
@@ -302,3 +273,20 @@ class SweepResultFromDisk(SweepResult):
             data={key: np.moveaxis(value, old_axes, new_axes) for key, value in loaded_arrays.items()},
             source=eval_source
         )
+
+
+class SweepResultFromMemory(SweepResult):
+    def __init__(self, sweep_config: SweepConfig, data: list[EvaluationResult]):
+        super().__init__(sweep_config, np.array(data))
+
+    def _retrieve_data(self, source: Any) -> EvaluationResult:
+        return source
+
+
+class SweepResultFromDisk(SweepResult):
+    def __init__(self, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]):
+        data = np.array([str(file) for file in files])
+        super().__init__(sweep_config, data)
+
+    def _retrieve_data(self, source: Any) -> EvaluationResult:
+        return pickleRead(source)
