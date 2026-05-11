@@ -2,7 +2,7 @@
 from typing import Callable, Any, TypeAlias
 import networkx as nx
 
-from .result import EvaluationResult
+from .result import EvaluationResult, NumericalResult
 
 
 NodeIOData: TypeAlias = dict[str, dict[str, Any]]
@@ -16,7 +16,12 @@ def _define_outputs(fn: Callable, keys: list[str]) -> Callable:
             if len(keys) != 1:
                 raise TypeError("A singular function output must map to a single key.")
             return {keys[0]: outputs}
-        formatted = {k: v for k, v in zip(keys, outputs)}
+
+        formatted = {}
+        for k, v in zip(keys, outputs):
+            if isinstance(v, NumericalResult):
+                v.source = fn.__name__
+            formatted[k] = v
         return formatted
     return inner
 
@@ -50,10 +55,14 @@ class EvaluationGraph:
         # TODO: The silent node data should ideally be dropped in the loop
         for node in self._silent_nodes:
             del data[node]
-        return EvaluationResult(data=data)
+        return EvaluationResult(data=data, source=self._get_name())
 
     def getDefaultInputs(self) -> NodeIOData:
         return {node: {} for node in self._get_start_nodes()}
+
+    @classmethod
+    def _get_name(cls) -> str:
+        return cls.__name__
 
     def _get_start_nodes(self) -> list[str]:
         return [node for node in self._graph.nodes if self._graph.in_degree(node) == 0]

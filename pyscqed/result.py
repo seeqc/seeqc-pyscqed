@@ -1,13 +1,7 @@
 """Lowest level result data structures"""
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
-
-
-@dataclass
-class EvaluationResult:
-    data: dict[str, dict[str, np.ndarray]]
 
 
 @dataclass
@@ -26,3 +20,9 @@ class EigenvectorResult(NumericalResult):
 
 class FunctionResult(NumericalResult):
     pass
+
+
+@dataclass
+class EvaluationResult:
+    data: dict[str, dict[str, NumericalResult]]
+    source: str
