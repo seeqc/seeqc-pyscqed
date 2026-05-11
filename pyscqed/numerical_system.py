@@ -796,7 +796,13 @@ class NumericalSystem(TempData):
     #       Diagonaliser Configuration
     ###################################################################################################################
     
-    def setDiagConfig(self, eigvalues=5, get_vectors=False, sparse=False, sparsesolveropts={"sigma":None, "mode":"normal", "maxiter":None, "tol":1e-3, "which":"SA"}):
+    def setDiagConfig(
+        self,
+        eigvalues=5,
+        get_vectors=False,
+        sparse=False,
+        sparsesolveropts={"sigma":None, "mode":"normal", "maxiter":None, "tol":1e-3, "which":"SA"}
+    ):
         self.diagonalizer_config = {
             'kwargs':{
                 'eigvalues':eigvalues, 
@@ -818,8 +824,11 @@ class NumericalSystem(TempData):
     def diagonalize(self, qobj: qt.Qobj) -> tuple[EigenvalueResult, EigenvectorResult | None]:
         result = self.diagonalizer_config['func'](qobj, **self.diagonalizer_config['kwargs'])
         if self.diagonalizer_config["kwargs"]["get_vectors"]:
-            return EigenvalueResult(data=result[0]), EigenvectorResult(data=result[1])
-        return EigenvalueResult(data=result), None
+            return (
+                EigenvalueResult(data=result[0], source="diagonalize"),
+                EigenvectorResult(data=result[1], source="diagonalize")
+            )
+        return EigenvalueResult(data=result, source="diagonalize"), None
     
     ###################################################################################################################
     #       Parameter Collection Wrapper Functions and Extended Functions
