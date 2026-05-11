@@ -45,6 +45,4 @@ class SweepNumericalResult:
     source: str
 
     def __getitem__(self, subscript):
-        if subscript is None:
-            return self.data[("Spectrum", "E")]
         return self.data[subscript]
