@@ -5,6 +5,7 @@ import numpy as np
 from pyscqed.circuit_graph import CircuitGraph
 from pyscqed.symbolic_system import SymbolicSystem
 from pyscqed.numerical_system import NumericalSystem
+from pyscqed.evaluation_graph import EvaluationGraph
 
 
 def get_single_node_graph() -> CircuitGraph:
@@ -50,7 +51,7 @@ def test_sweep_one_dimension():
     sweep = hamil.newSweepConfig()
     sweep.add("C", trace)
     result = hamil.runSweep(sweep)
-    traces, spectrum = result.get_numerical("C")
+    traces, spectrum = result.getNumerical("C")
     assert np.allclose(spectrum.T, expected_spectrum_sweep, rtol=0, atol=1e-6)
     assert np.array_equal(traces["C"], trace)
 
@@ -108,23 +109,72 @@ def test_sweep_two_dimensions():
     ):
         result.get("I", {"L": 50.0})
 
-    traces1, spectrum1 = result.get_numerical("C", {"L": 50.0})
-    traces2, spectrum2 = result.get_numerical("C", {"L": 60.0})
+    traces1, spectrum1 = result.getNumerical("C", {"L": 50.0})
+    traces2, spectrum2 = result.getNumerical("C", {"L": 60.0})
     assert np.allclose(spectrum1.T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(spectrum2.T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
     assert np.array_equal(traces1["C"], trace1)
     assert np.array_equal(traces2["C"], trace1)
 
     # Test multi-dimensional sweep retrieval
-    traces, CL = result.get_numerical(["C", "L"])
+    traces, CL = result.getNumerical(["C", "L"])
     assert np.allclose(CL[:, 0].T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(CL[:, 1].T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
     assert np.array_equal(traces["C"][:, 0], trace1)
     assert np.array_equal(traces["L"][0, :], trace2)
 
     # Test that the independent variable input order correctly formats the output
-    traces, CL = result.get_numerical(["L", "C"])
+    traces, CL = result.getNumerical(["L", "C"])
     assert np.allclose(CL[0].T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(CL[1].T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
     assert np.array_equal(traces["C"][0, :], trace1)
     assert np.array_equal(traces["L"][:, 0], trace2)
+
+
+def test_sweep_arb_eval_graph():
+    hamil = get_numerical_system(get_single_node_graph())
+    hamil.setParameterValues(
+        "C", 20.0, # In fF
+        "I", 40e-3, # In uA
+        "L", 50.0  # In pH
+    )
+
+    input_array = np.arange(6).reshape((2, 3))
+
+    def generator() -> np.ndarray:
+        return input_array
+
+    def manipulator(array: np.ndarray) -> np.ndarray:
+        return array.T
+
+    def final(array: np.ndarray) -> int:
+        return array.size
+
+    eval_graph = EvaluationGraph()
+    eval_graph.addNode("Generator", fn=generator, outputs=["array"])
+    eval_graph.addNode("Manipulator", fn=manipulator, outputs=["array"])
+    eval_graph.addNode("Final", fn=final, outputs=["size"])
+    eval_graph.addDependency("Generator", "Manipulator", preserve_source_outputs=True)
+    eval_graph.addDependency("Manipulator", "Final", preserve_source_outputs=True)
+
+    trace = np.linspace(20.0, 40.0, 2)
+    sweep = hamil.newSweepConfig()
+    sweep.setEvaluationGraph(eval_graph)
+    sweep.add("C", trace)
+    result = hamil.runSweep(sweep)
+
+    # All evaluation results by default
+    _, all_results = result.get("C")
+
+    # Individual evaluation results
+    _, size_result = result.getNumerical("C", eval_output=("Final", "size"))
+    assert np.array_equal(size_result, np.array([6., 6.]))
+    assert np.array_equal(size_result, all_results[("Final", "size")])
+
+    _, gen_result = result.getNumerical("C", eval_output=("Generator", "array"))
+    assert np.array_equal(gen_result, np.array([input_array, input_array]))
+    assert np.array_equal(gen_result, all_results[("Generator", "array")])
+
+    _, man_result = result.getNumerical("C", eval_output=("Manipulator", "array"))
+    assert np.array_equal(man_result, np.array([input_array.T, input_array.T]))
+    assert np.array_equal(man_result, all_results[("Manipulator", "array")])

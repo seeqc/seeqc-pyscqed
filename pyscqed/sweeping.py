@@ -10,7 +10,7 @@ from typing import TypeAlias, Generator
 from .parameters import ParamCollection
 from .evaluation_graph import EvaluationGraph
 from .util import pickleRead
-from .result import SweepNumericalResult
+from .result import SweepNumericalResult, NumericalResult
 
 
 EvaluationOutput: TypeAlias = tuple[str, str]
@@ -127,7 +127,7 @@ class SweepResult:
         self,
         independent_variables: str | list[str],
         static_variables: dict[str, SweepValue] | None = None,
-        eval_outputs: list[EvaluationOutput] = [("Spectrum", "E")]
+        eval_outputs: list[EvaluationOutput] | None = None
     ) -> tuple[dict[str, np.ndarray], SweepNumericalResult]:
         """Get the result of a sweep in a specific format, with the accompanying input vectors. The independent
         variables specify which traces to obtain, and the static variables specify the values of the other swept
@@ -171,13 +171,20 @@ class SweepResult:
             value_index = np.argmin(np.abs(sweep_vector - value))
             slices[self.parameter_axes[param]] = value_index
 
+        # Get the evaluation outputs
+        evaluation_outputs = None
+        if eval_outputs is None:
+            evaluation_outputs = self.sweep_config.getEvaluationGraph().getEvaluationKeys()
+        else:
+            evaluation_outputs = eval_outputs
+
         # Obtain the final result
         return (
             self._construct_input_mesh(independent_vars),
-            self._slice_data(slices, reshaped_data, eval_outputs, independent_vars)
+            self._slice_data(slices, reshaped_data, evaluation_outputs, independent_vars)
         )
 
-    def get_numerical(
+    def getNumerical(
         self,
         independent_variables: str | list[str],
         static_variables: dict[str, SweepValue] | None = None,
@@ -255,7 +262,7 @@ class SweepResultFromDisk(SweepResult):
         file = sliced_data[*index]
         eval_result = pickleRead(file)
         eval_source = eval_result.source
-        eval_keys = eval_result.get_keys()
+        eval_keys = eval_result.getKeys()
         if not all(eval_key in eval_keys for eval_key in eval_outputs):
             raise ValueError("A specified evaluation key cannot be found in the result data.")
 
@@ -264,18 +271,32 @@ class SweepResultFromDisk(SweepResult):
         old_axes = sorted(new_axes)
 
         # Initialize and populate the final data array
+        # TODO: The output type handling here is ugly, should probably always require a NumericalResult type
         loaded_arrays = {}
         for eval_key in eval_outputs:
             node = eval_key[0]
             output = eval_key[1]
-            sample_data = eval_result.data[node][output].data
-            file_data_shape = list(sample_data.shape)
-            shape_spec = list(sliced_data.shape) + file_data_shape
-            loaded_arrays[eval_key] = np.zeros(shape_spec)
+            raw_data = eval_result.data[node][output]
+            if isinstance(raw_data, NumericalResult):
+                file_data_shape = list(raw_data.data.shape)
+                shape_spec = list(sliced_data.shape) + file_data_shape
+                loaded_arrays[eval_key] = np.zeros(shape_spec)
+            elif isinstance(raw_data, np.ndarray):
+                file_data_shape = list(raw_data.shape)
+                shape_spec = list(sliced_data.shape) + file_data_shape
+                loaded_arrays[eval_key] = np.zeros(shape_spec)
+            else:
+                shape_spec = list(sliced_data.shape)
+                loaded_arrays[eval_key] = np.zeros(shape_spec)
+
         for index, file in np.ndenumerate(sliced_data):
             eval_result = pickleRead(file)
             for node, output in eval_outputs:
-                loaded_arrays[(node, output)][index] = eval_result.data[node][output].data
+                raw_data = eval_result.data[node][output]
+                if isinstance(raw_data, NumericalResult):
+                    loaded_arrays[(node, output)][index] = raw_data.data
+                else:
+                    loaded_arrays[(node, output)][index] = raw_data
 
         return SweepNumericalResult(
             data={key: np.moveaxis(value, old_axes, new_axes) for key, value in loaded_arrays.items()},

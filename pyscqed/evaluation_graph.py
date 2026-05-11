@@ -2,7 +2,7 @@
 from typing import Callable, Any, TypeAlias
 import networkx as nx
 
-from .result import EvaluationResult, NumericalResult
+from .result import EvaluationResult, NumericalResult, EvalKeys
 
 
 NodeIOData: TypeAlias = dict[str, dict[str, Any]]
@@ -30,14 +30,25 @@ class EvaluationGraph:
     def __init__(self):
         self._graph = nx.DiGraph()
         self._silent_nodes: set[str] = set()
+        self._output_keys: dict[str, list[str]] = {}
 
     def addNode(self, name: str, fn: Callable, outputs: list[str]):
         self._graph.add_node(name, node_fn=fn, node_outputs=outputs)
+        for output in outputs:
+            if name not in self._output_keys:
+                self._output_keys[name] = [output]
+            else:
+                self._output_keys[name].append(output)
 
     def addDependency(self, source_node: str, target_node: str, preserve_source_outputs: bool = False):
+        if source_node not in self._graph:
+            raise ValueError(f"{source_node} source node does not exist.")
+        if target_node not in self._graph:
+            raise ValueError(f"{target_node} target node does not exist.")
         self._graph.add_edge(source_node, target_node)
         if not preserve_source_outputs:
             self._silent_nodes.add(source_node)
+            del self._output_keys[source_node]
 
     def evaluate(self, inputs: NodeIOData) -> EvaluationResult:
         # Check the graph is a dag
@@ -59,6 +70,13 @@ class EvaluationGraph:
 
     def getDefaultInputs(self) -> NodeIOData:
         return {node: {} for node in self._get_start_nodes()}
+
+    def getEvaluationKeys(self) -> EvalKeys:
+        keys = []
+        for name, outputs in self._output_keys.items():
+            for output in outputs:
+                keys.append((name, output))
+        return keys
 
     @classmethod
     def _get_name(cls) -> str:
