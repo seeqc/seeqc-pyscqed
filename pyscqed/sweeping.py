@@ -246,8 +246,9 @@ class SweepResult:
                 shape_spec = list(sliced_data.shape) + file_data_shape
                 loaded_arrays[eval_key] = np.zeros(shape_spec)
             else:
+                object_type = type(raw_data)
                 shape_spec = list(sliced_data.shape)
-                loaded_arrays[eval_key] = np.empty(shape_spec, dtype=object)
+                loaded_arrays[eval_key] = np.empty(shape_spec, dtype=np.dtype(object_type))
 
         for index, data_source in np.ndenumerate(sliced_data):
             eval_result = self._retrieve_data(data_source)
