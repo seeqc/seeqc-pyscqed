@@ -31,14 +31,19 @@ class EvaluationGraph:
         self._graph = nx.DiGraph()
         self._silent_nodes: set[str] = set()
         self._output_keys: dict[str, list[str]] = {}
+        self._static_inputs: NodeIOData = {}
 
-    def addNode(self, name: str, fn: Callable, outputs: list[str]):
+    def addNode(self, name: str, fn: Callable, outputs: list[str], static_inputs: dict[str, Any] | None = None):
         self._graph.add_node(name, node_fn=fn, node_outputs=outputs)
         for output in outputs:
             if name not in self._output_keys:
                 self._output_keys[name] = [output]
             else:
                 self._output_keys[name].append(output)
+
+        self._static_inputs[name] = {}
+        if static_inputs is not None:
+            self._static_inputs[name] = static_inputs
 
     def addDependency(self, source_node: str, target_node: str, preserve_source_outputs: bool = False):
         if source_node not in self._graph:
@@ -94,7 +99,7 @@ class EvaluationGraph:
                 original_callable,
                 user_defined_outputs
             )
-            data[node] = wrapped_callable(**inputs[node])
+            data[node] = wrapped_callable(**inputs[node], **self._static_inputs[node])
         return data
 
     def _get_next_nodes_and_inputs(self, start_nodes: list[str], outputs: NodeIOData) -> tuple[list[str], NodeIOData]:

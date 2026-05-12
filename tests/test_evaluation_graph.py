@@ -98,3 +98,14 @@ def test_evaluation_output_preservation():
     assert "B" not in result.data
     assert result.data["C"]["final1"] == 0.0
     assert result.data["C"]["final2"] == 1.0
+
+
+def test_evaluation_static_inputs():
+    graph = EvaluationGraph()
+    graph.addNode("A", fn=node_test_fn1, outputs=["arg"], static_inputs={"input":1})
+    graph.addNode("B", fn=node_test_fn2, outputs=["final1"])
+    graph.addDependency("A", "B", preserve_source_outputs=True)
+    inputs = graph.getDefaultInputs()
+    result = graph.evaluate(inputs=inputs)
+    assert result.data["A"]["arg"] == 1
+    assert result.data["B"]["final1"] == True
