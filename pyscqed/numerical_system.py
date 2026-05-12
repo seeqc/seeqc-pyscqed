@@ -29,6 +29,16 @@ class HamiltonianSpectrum(EvaluationGraph):
         self.addDependency("Hamiltonian", "Spectrum")
 
 
+class SingleResonatorInteraction(EvaluationGraph):
+    def __init__(self, nsys: "NumericalSystem"):
+        super().__init__()
+        self.addNode("Hamiltonian", fn=nsys.getHamiltonian, outputs=["qobj"])
+        self.addNode("Spectrum", fn=nsys.diagonalize, outputs=["energies", "vectors"])
+        self.addNode("Resonator", fn=nsys.getResonatorResponse, outputs=["rwa_energies"])
+        self.addDependency("Hamiltonian", "Spectrum")
+        self.addDependency("Spectrum", "Resonator")
+
+
 class NumericalSystem(TempData):
     
     ## Mode types
@@ -743,12 +753,20 @@ class NumericalSystem(TempData):
             i = self.SS.edges.index(edge)
             return self.Pvecnp[i] * self.units.getPrefactor("Ep")
     
-    def getResonatorResponse(self, E, V, nmax=100, cpl_node=None):
+    def getResonatorResponse(
+        self,
+        energies: EigenvalueResult,
+        vectors: EigenvectorResult,
+        nmax=100,
+        cpl_node=None
+    ) -> np.array:
         # Save the derived parameter values for each sweep value
         if cpl_node is None:
-            #for k in self.SS.coupled_subsys[self.subsystem]['derived_parameters'].keys():
-            #    self.subsys_dparams[self.subsystem][k].append(self.dpnp[k])
-            return None
+            resonator_nodes = [node for node, value in self.SS.CG.resonators_cap.items() if value is not None]
+            if len(resonator_nodes) == 1:
+                cpl_node = resonator_nodes[0]
+            else:
+                raise RuntimeError("There are either no coupled resonators or too many to guess the node.")
         
         # Get the model parameters
         gC = self.SS.getParameterValue('g%ir' % cpl_node)
@@ -759,7 +777,8 @@ class NumericalSystem(TempData):
         Op = self.Qnp[index, 0] + self.Qbnp[index, 0]
         
         # Get coupling terms
-        E = E - E[0]
+        E = energies.data - energies.data[0]
+        V = vectors.data
         tmax = len(E)
         nmax = nmax + 1 + tmax
         norm = Op.matrix_element(V[0], V[1])

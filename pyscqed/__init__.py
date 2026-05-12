@@ -2,6 +2,8 @@ __all__ = [
     "CircuitGraph",
     "SymbolicSystem",
     "NumericalSystem",
+    "HamiltonianSpectrum",
+    "SingleResonatorInteraction",
     "ProjectData",
     "ParamCollection",
     "parameters",
@@ -13,7 +15,7 @@ __all__ = [
 ]
 from .circuit_graph import CircuitGraph
 from .symbolic_system import SymbolicSystem
-from .numerical_system import NumericalSystem
+from .numerical_system import NumericalSystem, HamiltonianSpectrum, SingleResonatorInteraction
 from .dataspec import ProjectData
 from .units import Units, units_presets
 from .parameters import ParamCollection
