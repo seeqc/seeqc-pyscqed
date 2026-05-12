@@ -238,8 +238,6 @@ sweep_config = hamil.newSweepConfig()
 sweep_config.add("phiZA", np.linspace(0.4, 0.5, 101))
 sweep = hamil.runSweep(sweep_config)
 
-energies
-
 # +
 # Get the sweep for a high value of Ic
 axes, energies = sweep.getNumerical('phiZA')
