@@ -156,8 +156,8 @@ class SweepResult:
             if independent_variable not in self.parameter_axes:
                 raise ValueError(f"Independent variable \"{independent_variable}\" not present in sweep.")
 
-        # Reshape the data
-        reshaped_data = self._reshape_data()
+        # Reshape the data and reorder the independent variable axes
+        reshaped_data = self._reshape_data(independent_vars)
 
         # Construct the slice specification for independent variables
         # NOTE: By default, all axes have full slice specifications, its the static variables that determine
@@ -196,9 +196,12 @@ class SweepResult:
         mesh, result = self.get(independent_variables, static_variables, [eval_output])
         return mesh, result[eval_output]
 
-    def _reshape_data(self) -> np.ndarray:
+    def _reshape_data(self, independent_vars: list[str]) -> np.ndarray:
         sweep_shape = list(self.sweep_config.getSweepShape())
-        return self.data.reshape(*sweep_shape)
+        uncollapsed = self.data.reshape(*sweep_shape)
+        new_axes = [self.parameter_axes[independent_var] for independent_var in independent_vars]
+        old_axes = sorted(new_axes)
+        return np.moveaxis(uncollapsed, old_axes, new_axes)
 
     @abstractmethod
     def _retrieve_data(self, source: Any) -> EvaluationResult:
@@ -227,10 +230,6 @@ class SweepResult:
         if not all(eval_key in eval_keys for eval_key in eval_outputs):
             raise ValueError("A specified evaluation key cannot be found in the result data.")
 
-        # Determine the axis reordering based on the user independent variables order
-        new_axes = [self.parameter_axes[independent_var] for independent_var in independent_vars]
-        old_axes = sorted(new_axes)
-
         # Initialize and populate the final data array
         # TODO: The output type handling here is ugly, should probably always require a NumericalResult type
         loaded_arrays = {}
@@ -248,7 +247,7 @@ class SweepResult:
                 loaded_arrays[eval_key] = np.zeros(shape_spec)
             else:
                 shape_spec = list(sliced_data.shape)
-                loaded_arrays[eval_key] = np.zeros(shape_spec)
+                loaded_arrays[eval_key] = np.empty(shape_spec, dtype=object)
 
         for index, data_source in np.ndenumerate(sliced_data):
             eval_result = self._retrieve_data(data_source)
@@ -260,7 +259,7 @@ class SweepResult:
                     loaded_arrays[(node, output)][index] = raw_data
 
         return SweepNumericalResult(
-            data={key: np.moveaxis(value, old_axes, new_axes) for key, value in loaded_arrays.items()},
+            data=loaded_arrays,
             source=eval_source
         )
 

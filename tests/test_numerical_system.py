@@ -191,3 +191,50 @@ def test_sweep_arb_eval_graph():
     _, man_result = result.getNumerical("C", eval_output=("Manipulator", "array"))
     assert np.array_equal(man_result, np.array([input_array.T, input_array.T]))
     assert np.array_equal(man_result, all_results[("Manipulator", "array")])
+
+
+def test_sweep_axis_reordering():
+    hamil = get_numerical_system(get_single_node_graph())
+    hamil.setParameterValues(
+        "C", 20.0, # In fF
+        "I", 40e-3, # In uA
+        "L", 50.0  # In pH
+    )
+
+    def generator() -> list[float]:
+        return [hamil.getParameterValue("C"), hamil.getParameterValue("L")]
+
+    eval_graph = EvaluationGraph()
+    eval_graph.addNode("Generator", fn=generator, outputs=["array"])
+
+    # Sweep one dimension, no reordering
+    sweep = hamil.newSweepConfig()
+    sweep.setEvaluationGraph(eval_graph)
+    sweep.add("C", np.linspace(20.0, 40.0, 2))
+    result = hamil.runSweep(sweep)
+    _, all_results = result.get("C")
+    assert all_results[('Generator', 'array')][0] == [20.0, 50.0]
+    assert all_results[('Generator', 'array')][1] == [40.0, 50.0]
+
+    # Sweep two dimensions, but request a trace that reorders the L axis from 1 to 0
+    sweep = hamil.newSweepConfig()
+    sweep.setEvaluationGraph(eval_graph)
+    sweep.add("C", np.linspace(20.0, 40.0, 2))
+    sweep.add("L", np.linspace(50.0, 60.0, 2))
+    result = hamil.runSweep(sweep)
+    _, all_results = result.get("L", {"C": 20})
+    assert all_results[('Generator', 'array')][0] == [20.0, 50.0]
+    assert all_results[('Generator', 'array')][1] == [20.0, 60.0]
+    _, all_results = result.get("L", {"C": 40})
+    assert all_results[('Generator', 'array')][0] == [40.0, 50.0]
+    assert all_results[('Generator', 'array')][1] == [40.0, 60.0]
+
+    # Original axes
+    _, all_results = result.get(["C", "L"])
+    assert all_results[('Generator', 'array')][0, 0] == [20.0, 50.0]
+    assert all_results[('Generator', 'array')][1, 0] == [40.0, 50.0]
+
+    # Swapped axes
+    _, all_results = result.get(["L", "C"])
+    assert all_results[('Generator', 'array')][0, 0] == [20.0, 50.0]
+    assert all_results[('Generator', 'array')][1, 0] == [20.0, 60.0]

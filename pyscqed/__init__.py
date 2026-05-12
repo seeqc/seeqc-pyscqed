@@ -6,6 +6,7 @@ __all__ = [
     "SingleResonatorInteraction",
     "ProjectData",
     "ParamCollection",
+    "EvaluationGraph",
     "parameters",
     "physical_constants",
     "text2latex",
@@ -19,6 +20,7 @@ from .numerical_system import NumericalSystem, HamiltonianSpectrum, SingleResona
 from .dataspec import ProjectData
 from .units import Units, units_presets
 from .parameters import ParamCollection
+from .evaluation_graph import EvaluationGraph
 from . import parameters
 from . import physical_constants
 from . import text2latex
