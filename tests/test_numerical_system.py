@@ -52,14 +52,16 @@ def test_sweep_one_dimension():
     sweep.add("C", trace)
 
     result_disk = hamil.runSweep(sweep)
-    traces, spectrum = result_disk.getNumerical("C")
+    spectrum = result_disk.getNumericalOutput("C")
     assert np.allclose(spectrum.T, expected_spectrum_sweep, rtol=0, atol=1e-6)
-    assert np.array_equal(traces["C"], trace)
+    traces = result_disk.getInputPoints("C")
+    assert np.array_equal(traces, trace)
 
     result_mem = hamil.runSweep(sweep, use_disk=False)
-    traces, spectrum = result_mem.getNumerical("C")
+    spectrum = result_mem.getNumericalOutput("C")
     assert np.allclose(spectrum.T, expected_spectrum_sweep, rtol=0, atol=1e-6)
-    assert np.array_equal(traces["C"], trace)
+    traces = result_disk.getInputPoints("C")
+    assert np.array_equal(traces, trace)
 
 
 def test_sweep_two_dimensions():
@@ -107,39 +109,42 @@ def test_sweep_two_dimensions():
         ValueError,
         match="Insufficient independent and static variables to retrieve sweep result data."
     ):
-        result.get("C")
+        result.getOutputs("C")
 
     with pytest.raises(
         ValueError,
         match="Independent variable \"I\" not present in sweep."
     ):
-        result.get("I", {"L": 50.0})
+        result.getOutputs("I", {"L": 50.0})
 
-    traces1, spectrum1 = result.getNumerical("C", {"L": 50.0})
-    traces2, spectrum2 = result.getNumerical("C", {"L": 60.0})
+    spectrum1 = result.getNumericalOutput("C", {"L": 50.0})
+    spectrum2 = result.getNumericalOutput("C", {"L": 60.0})
     assert np.allclose(spectrum1.T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(spectrum2.T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
-    assert np.array_equal(traces1["C"], trace1)
-    assert np.array_equal(traces2["C"], trace1)
+    traces1 = result.getInputPoints("C")
+    assert np.array_equal(traces1, trace1)
 
     # Test multi-dimensional sweep retrieval
-    traces, CL = result.getNumerical(["C", "L"])
+    CL = result.getNumericalOutput(["C", "L"])
     assert np.allclose(CL[:, 0].T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(CL[:, 1].T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
+    traces = result.getInputMesh(["C", "L"])
     assert np.array_equal(traces["C"][:, 0], trace1)
     assert np.array_equal(traces["L"][0, :], trace2)
 
     # Test that the independent variable input order correctly formats the output
-    traces, CL = result.getNumerical(["L", "C"])
+    CL = result.getNumericalOutput(["L", "C"])
     assert np.allclose(CL[0].T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(CL[1].T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
+    traces = result.getInputMesh(["L", "C"])
     assert np.array_equal(traces["C"][0, :], trace1)
     assert np.array_equal(traces["L"][:, 0], trace2)
 
     result_mem = hamil.runSweep(sweep, use_disk=False)
-    traces, CL = result_mem.getNumerical(["L", "C"])
+    CL = result_mem.getNumericalOutput(["L", "C"])
     assert np.allclose(CL[0].T, expected_spectrum_sweep1, rtol=0, atol=1e-6)
     assert np.allclose(CL[1].T, expected_spectrum_sweep2, rtol=0, atol=1e-6)
+    traces = result.getInputMesh(["L", "C"])
     assert np.array_equal(traces["C"][0, :], trace1)
     assert np.array_equal(traces["L"][:, 0], trace2)
 
@@ -177,18 +182,18 @@ def test_sweep_arb_eval_graph():
     result = hamil.runSweep(sweep)
 
     # All evaluation results by default
-    _, all_results = result.get("C")
+    all_results = result.getOutputs("C")
 
     # Individual evaluation results
-    _, size_result = result.getNumerical("C", eval_output=("Final", "size"))
+    size_result = result.getNumericalOutput("C", eval_output=("Final", "size"))
     assert np.array_equal(size_result, np.array([6., 6.]))
     assert np.array_equal(size_result, all_results[("Final", "size")])
 
-    _, gen_result = result.getNumerical("C", eval_output=("Generator", "array"))
+    gen_result = result.getNumericalOutput("C", eval_output=("Generator", "array"))
     assert np.array_equal(gen_result, np.array([input_array, input_array]))
     assert np.array_equal(gen_result, all_results[("Generator", "array")])
 
-    _, man_result = result.getNumerical("C", eval_output=("Manipulator", "array"))
+    man_result = result.getNumericalOutput("C", eval_output=("Manipulator", "array"))
     assert np.array_equal(man_result, np.array([input_array.T, input_array.T]))
     assert np.array_equal(man_result, all_results[("Manipulator", "array")])
 
@@ -212,7 +217,7 @@ def test_sweep_axis_reordering():
     sweep.setEvaluationGraph(eval_graph)
     sweep.add("C", np.linspace(20.0, 40.0, 2))
     result = hamil.runSweep(sweep)
-    _, all_results = result.get("C")
+    all_results = result.getOutputs("C")
     assert all_results[('Generator', 'array')][0] == [20.0, 50.0]
     assert all_results[('Generator', 'array')][1] == [40.0, 50.0]
 
@@ -222,19 +227,19 @@ def test_sweep_axis_reordering():
     sweep.add("C", np.linspace(20.0, 40.0, 2))
     sweep.add("L", np.linspace(50.0, 60.0, 2))
     result = hamil.runSweep(sweep)
-    _, all_results = result.get("L", {"C": 20})
+    all_results = result.getOutputs("L", {"C": 20})
     assert all_results[('Generator', 'array')][0] == [20.0, 50.0]
     assert all_results[('Generator', 'array')][1] == [20.0, 60.0]
-    _, all_results = result.get("L", {"C": 40})
+    all_results = result.getOutputs("L", {"C": 40})
     assert all_results[('Generator', 'array')][0] == [40.0, 50.0]
     assert all_results[('Generator', 'array')][1] == [40.0, 60.0]
 
     # Original axes
-    _, all_results = result.get(["C", "L"])
+    all_results = result.getOutputs(["C", "L"])
     assert all_results[('Generator', 'array')][0, 0] == [20.0, 50.0]
     assert all_results[('Generator', 'array')][1, 0] == [40.0, 50.0]
 
     # Swapped axes
-    _, all_results = result.get(["L", "C"])
+    all_results = result.getOutputs(["L", "C"])
     assert all_results[('Generator', 'array')][0, 0] == [20.0, 50.0]
     assert all_results[('Generator', 'array')][1, 0] == [20.0, 60.0]

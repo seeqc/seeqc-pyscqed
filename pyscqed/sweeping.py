@@ -123,12 +123,12 @@ class SweepResult:
         self.parameter_axes = sweep_config.getSweepAxes()
         self.data: np.ndarray = data
 
-    def get(
+    def getOutputs(
         self,
         independent_variables: str | list[str],
         static_variables: dict[str, SweepValue] | None = None,
         eval_outputs: list[EvaluationOutput] | None = None
-    ) -> tuple[dict[str, np.ndarray], SweepNumericalResult]:
+    ) -> SweepNumericalResult:
         """Get the result of a sweep in a specific format, with the accompanying input vectors. The independent
         variables specify which traces to obtain, and the static variables specify the values of the other swept
         variables to take the trace along.
@@ -137,14 +137,7 @@ class SweepResult:
         """
         if static_variables is None:
             static_variables = {}
-
-        independent_vars = None
-        if isinstance(independent_variables, str):
-            independent_vars = [independent_variables]
-        elif isinstance(independent_variables, list):
-            independent_vars = independent_variables
-        else:
-            raise TypeError("independent_variables must be a list[str] or str.")
+        independent_vars = self._validate_independent_variables(independent_variables)
 
         # Check there are enough inputs to retrieve a sweep
         sweep_dimensions = self.sweep_config.getDimensionCount()
@@ -179,22 +172,38 @@ class SweepResult:
             evaluation_outputs = eval_outputs
 
         # Obtain the final result
-        return (
-            self._construct_input_mesh(independent_vars),
-            self._slice_data(slices, reshaped_data, evaluation_outputs, independent_vars)
-        )
+        return self._slice_data(slices, reshaped_data, evaluation_outputs, independent_vars)
 
-    def getNumerical(
+    def getNumericalOutput(
         self,
         independent_variables: str | list[str],
         static_variables: dict[str, SweepValue] | None = None,
         eval_output: EvaluationOutput = ("Spectrum", "E")
-    ) -> tuple[dict[str, np.ndarray], np.ndarray]:
+    ) -> np.ndarray:
         """Get a raw (numpy) numerical result from this sweep result. This call can only retrieve a single
         evaluation output.
         """
-        mesh, result = self.get(independent_variables, static_variables, [eval_output])
-        return mesh, result[eval_output]
+        result = self.getOutputs(independent_variables, static_variables, [eval_output])
+        return result[eval_output]
+
+    def getInputPoints(self, variable: str) -> np.ndarray:
+        """Get a single variable sweep vector."""
+        return self.sweep_config.get(variable)
+
+    def getInputMesh(self, variables: str | list[str]) -> dict[str, np.ndarray]:
+        """Get a multidimensional mesh of the sweep input values."""
+        independent_vars = self._validate_independent_variables(variables)
+        return self._construct_input_mesh(independent_vars)
+
+    def _validate_independent_variables(self, variables: str | list[str]) -> list[str]:
+        independent_vars: list[str]
+        if isinstance(variables, str):
+            independent_vars = [variables]
+        elif isinstance(variables, list):
+            independent_vars = variables
+        else:
+            raise TypeError("independent_variables must be a list[str] or str.")
+        return independent_vars
 
     def _reshape_data(self, independent_vars: list[str]) -> np.ndarray:
         sweep_shape = list(self.sweep_config.getSweepShape())
