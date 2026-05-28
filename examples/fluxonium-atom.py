@@ -90,11 +90,10 @@ sweep_config.add('phi-', np.linspace(0, 1.0, 101))
 sweep = hamil.runSweep(sweep_config)
 # -
 
-traces, E = sweep.get('phi-')
-gaps = []
+E = sweep.getNumericalOutput('phi-')
+trace = sweep.getInputPoints('phi-')
 for i in range(5):
-    gaps.append(E[i]-E[0])
-    plt.plot(traces['phi-'], gaps[i])
+    plt.plot(trace, E.T[i] - E.T[0])
 plt.xlabel("$\\phi_+$ [$\\phi_0$]")
 plt.ylabel("Potential [GHz]")
 
@@ -107,11 +106,10 @@ sweep_config.add('phi+', np.linspace(0, 1.0, 101))
 sweep = hamil.runSweep(sweep_config)
 # -
 
-traces, E = sweep.get('phi+')
-gaps = []
+E = sweep.getNumericalOutput('phi+')
+trace = sweep.getInputPoints('phi+')
 for i in range(5):
-    gaps.append(E[i]-E[0])
-    plt.plot(traces['phi+'], gaps[i])
+    plt.plot(trace, E.T[i] - E.T[0])
 plt.xlabel("$\\phi_+$ [$\\phi_0$]")
 plt.ylabel("Potential [GHz]")
 
