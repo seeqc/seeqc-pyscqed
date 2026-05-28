@@ -94,15 +94,15 @@ sweep_config.add('phiZ', np.linspace(0.25, 0.6, 101))
 sweep = hamil.runSweep(sweep_config)
 
 # +
-# Get the sweep for a high value of Ic
-axes, energies = sweep.getNumerical("phiZ")
+energies = sweep.getNumericalOutput("phiZ")
+phiZ = sweep.getInputPoints("phiZ")
 
 fig, ax = plt.subplots(1, 1, constrained_layout=True, figsize=(4, 6))
 
 # Energy spectrum
 for i in range(5):
     y = energies.T[i] - energies.T[0]
-    ax.plot(axes["phiZ"], y)
+    ax.plot(phiZ, y)
 ax.set_xlabel(r"$\Phi_{Z}$ ($\Phi_0$)")
 ax.set_ylabel("$E_{g,i}$ (GHz)")
 ax.set_title("Energy Spectrum")
@@ -133,16 +133,17 @@ sweep = hamil.runSweep(sweep_config)
 fr = hamil.getParameterValue('f1r')
 frl = hamil.getParameterValue('f1rl')
 
-axes, Erwa = sweep.getNumerical("phiZ", eval_output=("Resonator", "rwa_energies"))
+Erwa = sweep.getNumericalOutput("phiZ", eval_output=("Resonator", "rwa_energies"))
+phiZ = sweep.getInputPoints("phiZ")
 Edressed = util.getCircuitLambShift(Erwa.T)
 # -
 
 # Dressed energy spectrum
 for i in range(5):
     y = Edressed[i]
-    plt.plot(axes["phiZ"], y)
-plt.plot([axes["phiZ"][0], axes["phiZ"][-1]], [fr, fr], "k--")
-plt.plot([axes["phiZ"][0], axes["phiZ"][-1]], [frl, frl], "r--")
+    plt.plot(phiZ, y)
+plt.plot([phiZ[0], phiZ[-1]], [fr, fr], "k--")
+plt.plot([phiZ[0], phiZ[-1]], [frl, frl], "r--")
 plt.xlabel("$\\Phi_{Z}$ ($\\Phi_0$)")
 plt.ylabel("$E_{g,i}$ (GHz)")
 plt.title("(Loaded) Dressed Coupler Energy Spectrum")
@@ -154,25 +155,25 @@ plt.title("(Loaded) Dressed Coupler Energy Spectrum")
 # Get the modulated resonator frequency
 Eres = util.getResonatorShift(Erwa.T)
 
-plt.plot(axes["phiZ"], Eres[0,0])
-plt.plot([axes["phiZ"][0], axes["phiZ"][-1]], [fr, fr], "k--")
-plt.plot([axes["phiZ"][0], axes["phiZ"][-1]], [frl, frl], "r--")
+plt.plot(phiZ, Eres[0,0])
+plt.plot([phiZ[0], phiZ[-1]], [fr, fr], "k--")
+plt.plot([phiZ[0], phiZ[-1]], [frl, frl], "r--")
 plt.xlabel("$\\Phi_{Z}$ ($\\Phi_0$)")
 plt.ylabel("$\omega_{r}/2\pi$ (GHz)")
 plt.title("Resonator Modulation Against $Q_{1e}$")
 
 # And when the qubit is in the first excited state:
 
-plt.plot(axes["phiZ"], Eres[1, 0])
-plt.plot([axes["phiZ"][0], axes["phiZ"][-1]], [fr, fr], "k--")
-plt.plot([axes["phiZ"][0], axes["phiZ"][-1]], [frl, frl], "r--")
+plt.plot(phiZ, Eres[1, 0])
+plt.plot([phiZ[0], phiZ[-1]], [fr, fr], "k--")
+plt.plot([phiZ[0], phiZ[-1]], [frl, frl], "r--")
 plt.xlabel("$\\Phi_{Z}$ ($\\Phi_0$)")
 plt.ylabel("$\omega_{r}/2\pi$ (GHz)")
 plt.title("Resonator Modulation Against $Q_{1e}$")
 
 # The single-photon dispersive shift $\chi$ due to transitions between the ground and first excited states will then simply be:
 
-plt.plot(axes["phiZ"], (Eres[1, 0] - Eres[0, 0])*1e3)
+plt.plot(phiZ, (Eres[1, 0] - Eres[0, 0])*1e3)
 plt.xlabel("$\\Phi_{Z}$ ($\\Phi_0$)")
 plt.ylabel("$\chi/2\pi$ (MHz)")
 plt.title("Resonator Modulation Against $\\phi_{Z}$")
@@ -239,15 +240,15 @@ sweep_config.add("phiZA", np.linspace(0.4, 0.5, 101))
 sweep = hamil.runSweep(sweep_config)
 
 # +
-# Get the sweep for a high value of Ic
-axes, energies = sweep.getNumerical('phiZA')
+energies = sweep.getNumericalOutput('phiZA')
+phiZA = sweep.getInputPoints('phiZA')
 
 fig, ax = plt.subplots(1, 2, constrained_layout=True)
 
 # Energy spectrum
 for i in range(5):
     y = energies.T[i] - energies.T[0]
-    ax[0].plot(axes["phiZA"], y)
+    ax[0].plot(phiZA, y)
 ax[0].set_xlabel("$\Phi_{Z}$ ($\Phi_0$)")
 ax[0].set_ylabel("$E_{g,i}$ (GHz)")
 ax[0].set_title("Energy Spectrum")
@@ -257,7 +258,7 @@ ax[0].set_title("Energy Spectrum")
 # Energy spectrum
 for i in range(5):
     y = energies.T[i] - energies.T[0]
-    ax[1].plot(axes["phiZA"], y)
+    ax[1].plot(phiZA, y)
 ax[1].set_xlabel("$\Phi_{Z}$ ($\Phi_0$)")
 ax[1].set_ylabel("$E_{g,i}$ (GHz)")
 ax[1].set_title("Energy Spectrum")
