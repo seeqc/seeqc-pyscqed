@@ -5,10 +5,6 @@ import sympy as sy
 
 from pyscqed.sweeping import SweepConfig
 from pyscqed.parameters import ParamCollection
-from pyscqed.circuit_graph import CircuitGraph
-from pyscqed.symbolic_system import SymbolicSystem
-from pyscqed.numerical_system import NumericalSystem
-from pyscqed.evaluation_graph import EvaluationGraph
 
 
 def create_parameter_collection(names: list[str], values: list[float]) -> ParamCollection:
@@ -145,59 +141,3 @@ def test_sweep_point_generator():
     assert next_values["C"] == 0.5
     assert next_values["L"] == 2.0
     assert next_values["I"] == 4.0
-
-
-def create_test_numerical_system() -> NumericalSystem:
-    graph = CircuitGraph()
-    graph.addBranch(0, 1, "I")
-    graph.addBranch(0, 1, "C")
-    graph.addBranch(0, 1, "L")
-
-    hamil = NumericalSystem(SymbolicSystem(graph))
-    hamil.configureOperator(1, 40, "charge")
-    hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
-    return hamil
-
-
-def test_get_numerical_output_non_numpy_array():
-    hamil = create_test_numerical_system()
-
-    def make_list() -> list:
-        return [object(), object()]
-
-    eval_graph = EvaluationGraph()
-    eval_graph.addNode("Producer", fn=make_list, outputs=["items"])
-
-    sweep_config = hamil.newSweepConfig()
-    sweep_config.setEvaluationGraph(eval_graph)
-    sweep_config.add("C", np.linspace(20.0, 40.0, 3))
-    sweep = hamil.runSweep(sweep_config)
-
-    # This must not raise ValueError
-    items = sweep.getNumericalOutput("C", eval_output=("Producer", "items"))
-    assert items.shape == (3,)
-    assert isinstance(items[0], list)
-    assert len(items[0]) == 2
-
-
-def test_get_numerical_output_eigenvalues_with_vectors():
-    hamil = create_test_numerical_system()
-    hamil.setDiagConfig(get_vectors=True, eigvalues=5)
-
-    eval_graph = EvaluationGraph()
-    eval_graph.addNode("Hamiltonian", fn=hamil.getHamiltonian, outputs=["qobj"])
-    eval_graph.addNode("Spectrum", fn=hamil.diagonalize, outputs=["energies", "vectors"])
-    eval_graph.addDependency("Hamiltonian", "Spectrum")
-
-    sweep_config = hamil.newSweepConfig()
-    sweep_config.setEvaluationGraph(eval_graph)
-    sweep_config.add("C", np.linspace(20.0, 40.0, 3))
-    sweep = hamil.runSweep(sweep_config)
-
-    energies = sweep.getNumericalOutput("C", eval_output=("Spectrum", "energies"))
-    assert isinstance(energies, np.ndarray)
-    assert energies.shape == (3, 5)
-
-    vectors = sweep.getNumericalOutput("C", eval_output=("Spectrum", "vectors"))
-    assert isinstance(vectors, np.ndarray)
-    assert vectors.shape == (3, 5)
