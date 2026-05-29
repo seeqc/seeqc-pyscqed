@@ -249,7 +249,7 @@ class SweepResult:
             if isinstance(raw_data, NumericalResult):
                 file_data_shape = list(raw_data.data.shape)
                 shape_spec = list(sliced_data.shape) + file_data_shape
-                loaded_arrays[eval_key] = np.zeros(shape_spec)
+                loaded_arrays[eval_key] = np.zeros(shape_spec, dtype=raw_data.data.dtype)
             elif isinstance(raw_data, np.ndarray):
                 file_data_shape = list(raw_data.shape)
                 shape_spec = list(sliced_data.shape) + file_data_shape
