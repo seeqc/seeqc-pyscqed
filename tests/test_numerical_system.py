@@ -282,4 +282,3 @@ def test_get_numerical_output_eigenvalues_with_vectors():
     vectors = sweep.getNumericalOutput("C", eval_output=("Spectrum", "vectors"))
     assert isinstance(vectors, np.ndarray)
     assert vectors.shape == (3, 5)
-
