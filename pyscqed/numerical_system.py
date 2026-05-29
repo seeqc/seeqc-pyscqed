@@ -673,7 +673,7 @@ class NumericalSystem(TempData):
         else:
             raise Exception("Edge %s is not current-carrying" % repr(edge))
     
-    def getCurrentMatrixElement(self, E, V, edge=None, elements=None) -> float:
+    def getCurrentMatrixElement(self, energies: EigenvalueResult, vectors: EigenvectorResult, edge=None, elements=None) -> float:
         # Get the relevant operator
         Iop = self.getCurrentOperator(edge=edge)
         
@@ -683,7 +683,7 @@ class NumericalSystem(TempData):
         result = np.zeros(len(elements), dtype=np.float64)
         for i, indices in enumerate(elements):
             i1, i2 = indices
-            result[i] = Iop.matrix_element(V[i1], V[i2]).real
+            result[i] = Iop.matrix_element(vectors.data[i1], vectors.data[i2]).real
         return result
     
     def getVoltageOperator(self, node=None):
@@ -700,7 +700,7 @@ class NumericalSystem(TempData):
         # Use the inverse capacitance matrix
         return self.units.getPrefactor("Vop") * Q[i, 0] * self.Cinvnp[i, i]
     
-    def getVoltageMatrixElement(self, E, V, node=None, elements=None):
+    def getVoltageMatrixElement(self, energies: EigenvalueResult, vectors: EigenvectorResult, node=None, elements=None):
         # Get the relevant operator
         Vop = self.getVoltageOperator(node=node)
         
@@ -710,7 +710,7 @@ class NumericalSystem(TempData):
         result = np.zeros(len(elements), dtype=np.float64)
         for i, indices in enumerate(elements):
             i1, i2 = indices
-            result[i] = Vop.matrix_element(V[i1], V[i2]).real
+            result[i] = Vop.matrix_element(vectors.data[i1], vectors.data[i2]).real
         return result
     
     def getChargingEnergies(self, node=None):
