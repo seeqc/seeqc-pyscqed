@@ -25,4 +25,4 @@ from . import parameters
 from . import physical_constants
 from . import text2latex
 from . import util
-__version__ = "0.15.0"
+__version__ = "0.14.0"
