@@ -9,6 +9,7 @@ import time
 
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
+from .simulation_state import _SymbolicParts
 from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk, SweepResultFromMemory
 from .evaluation_graph import EvaluationGraph
 from .result import EigenvalueResult, EigenvectorResult, FunctionResult
@@ -153,11 +154,13 @@ class NumericalSystem(TempData):
         flux_max = None
         if basis == "oscillator":
             index = self.getNodeIndex(node)
-            frequency = sy.sqrt(self.Linv[index, index]*self.Cinv[index, index])
+            Linv = self._symbolic_parts.inverse_inductance_matrix
+            Cinv = self._symbolic_parts.inverse_capacitance_matrix
+            frequency = sy.sqrt(Linv[index, index]*Cinv[index, index])
             freq = "fosc%i" % node
             self.SS.addParameter(freq)
             self.SS.addParameterisation(freq, frequency)
-            impedance = sy.sqrt(self.Cinv[index, index]/self.Linv[index, index])
+            impedance = sy.sqrt(Cinv[index, index]/Linv[index, index])
             impe = "Zosc%i" % node
             self.SS.addParameter(impe)
             self.SS.addParameterisation(impe, impedance)
@@ -291,26 +294,9 @@ class NumericalSystem(TempData):
         return Zpref
     
     def getSymbolicExpressions(self):
-        
-        # Generate final symbolic expressions
-        self.Cinv = self.SS.getInverseCapacitanceMatrix()
-        self.Linv = self.SS.getInverseInductanceMatrix()
-
-        # Get branch inverse inductance matrix for branch current calculations
-        self.Linv_b = self.SS.getInverseInductanceMatrix(mode='branch')
-        self.Cinv_n = self.SS.getInverseCapacitanceMatrix()
-        
-        # Symbolic expressions independent of a coupled subsystem
-        self.Jvec = self.SS.getJosephsonVector()
-        self.Pvec = self.SS.getPhaseSlipVector()
-        self.Qb = self.SS.getChargeBiasVector()
-        self.Qbt = self.SS.Rnb*self.SS.getChargeBiasVector()
-        self.Pb = self.SS.getFluxBiasVector(mode="branch")
-        self.Pbm = self.SS.getFluxBiasMatrix(mode="branch")
-        self.Pbi = self.SS.getFluxBiasVectorInd()
-        
-        # Basis representation prefactors
-        #self.Zpref = self.getBasisPrefactors()
+        """ Collects the symbolic expressions required to build the numerical Hamiltonian
+        into a :class:`~pyscqed.simulation_state._SymbolicParts` instance. """
+        self._symbolic_parts = _SymbolicParts(self.SS)
     
     def prepareOperators(self):
         self.getExpandedOperatorsMap()
@@ -332,19 +318,24 @@ class NumericalSystem(TempData):
     def substitute(self):
         
         subs = self.SS.getSymbolValuesDict()
-        
+        parts = self._symbolic_parts
+
         # Substitute circuit parameters
-        self.Cinvnp = np.asmatrix(self.Cinv.subs(subs), dtype=np.float64)
-        self.Linvnp = np.asmatrix(self.Linv.subs(subs), dtype=np.float64)
-        self.Jvecnp = np.asarray(self.Jvec.subs(subs), dtype=np.float64)[:, 0]
-        self.Pvecnp = np.asarray(self.Pvec.subs(subs), dtype=np.float64)[:, 0]
-        
+        self.Cinvnp = np.asmatrix(parts.inverse_capacitance_matrix.subs(subs), dtype=np.float64)
+        self.Linvnp = np.asmatrix(parts.inverse_inductance_matrix.subs(subs), dtype=np.float64)
+        self.Jvecnp = np.asarray(parts.josephson_vector.subs(subs), dtype=np.float64)[:, 0]
+        self.Pvecnp = np.asarray(parts.phase_slip_vector.subs(subs), dtype=np.float64)[:, 0]
+
         # Substitute external biases
-        self.Qbnp = np.asmatrix(self.Qb.subs(subs), dtype=np.float64) # x 2e
-        self.Qbtnp = np.asmatrix(self.Qbt.subs(subs), dtype=np.float64) # x 2e
-        self.Pbsm = np.asmatrix(self.Pbm.subs(subs), dtype=np.float64)
-        self.Pbnp = np.asmatrix(self.Pb.subs(subs), dtype=np.float64) # x Phi0
-        self.Pbinp = np.asmatrix(self.Pbi.subs(subs), dtype=np.float64)
+        self.Qbnp = np.asmatrix(parts.charge_bias_vector.subs(subs), dtype=np.float64) # x 2e
+        self.Qbtnp = np.asmatrix(
+            parts.branch_charge_bias_vector.subs(subs), dtype=np.float64
+        ) # x 2e
+        self.Pbsm = np.asmatrix(parts.branch_flux_bias_matrix.subs(subs), dtype=np.float64)
+        self.Pbnp = np.asmatrix(
+            parts.branch_flux_bias_vector.subs(subs), dtype=np.float64
+        ) # x Phi0
+        self.Pbinp = np.asmatrix(parts.inductive_flux_bias_vector.subs(subs), dtype=np.float64)
         
         # Generate exponentiated flux biases
         Pexp1 = []
@@ -365,7 +356,9 @@ class NumericalSystem(TempData):
         self.Qexp_mnp = Qexp2
         
         # Get branch inverse inductance matrix for branch current calculations
-        self.Linvnp_b = np.asmatrix(self.Linv_b.subs(subs), dtype=np.float64)
+        self.Linvnp_b = np.asmatrix(
+            parts.branch_inverse_inductance_matrix.subs(subs), dtype=np.float64
+        )
     
     def getLinearPart(self):
         # Get charging energy
