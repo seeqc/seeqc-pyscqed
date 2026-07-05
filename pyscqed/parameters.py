@@ -307,7 +307,7 @@ class ParamCollection:
             self.__parameterisation_graph.add_node(name)
     
     def addParameters(self, *names):
-        """ Adds multiple new parameters to the collection if they do not already exist. If some or all exist, nothing is reported.
+        r""" Adds multiple new parameters to the collection if they do not already exist. If some or all exist, nothing is reported.
         
         :param \*name: Arguments list of parameter names to add.
         :type \*name: str, str ...
@@ -439,7 +439,7 @@ class ParamCollection:
         return self.__collection[name].name_latex
     
     def setParameterValues(self, *name_value_pairs):
-        """ Set many parameter values.
+        r""" Set many parameter values.
         
         :param \*name_value_pairs: Arguments list, formatted as the parameter name followed by its value, or optionally passed as a dictionary.
         :type \*name_value_pairs: str, float, str, float ..., or a dict.
@@ -480,7 +480,7 @@ class ParamCollection:
         self._update_parameterisations()
     
     def getParameterValues(self, *names):
-        """ Get the values of many parameters as a dictionary.
+        r""" Get the values of many parameters as a dictionary.
         
         :param \*names: Arguments list, formatted as the parameter names.
         :type \*names: str, str ...
@@ -499,7 +499,7 @@ class ParamCollection:
         return values
     
     def getSymbolValues(self, *names):
-        """ Get the values of many parameters keyed by symbol. Useful for getting a substitution dict of a selection of parameters.
+        r""" Get the values of many parameters keyed by symbol. Useful for getting a substitution dict of a selection of parameters.
         
         :param \*names: Arguments list, formatted as the parameter names.
         :type \*names: str, str ...
@@ -532,7 +532,7 @@ class ParamCollection:
     ###################################################################################################################
     
     def getSymbols(self, *names, symbol_overrides=None):
-        """ Generates a set of `sympy` symbols for use in parameterisation. They are added as independent Param instances.
+        r""" Generates a set of `sympy` symbols for use in parameterisation. They are added as independent Param instances.
         The symbols are returned in a dictionary so that they can be used to create expressions.
         
         :param \*names: Arguments list, formatted as the parameter names.
@@ -728,7 +728,7 @@ class ParamCollection:
         return True
     
     def getParameterisationsInvolving(self, *names):
-        """ Gets the list of parametric parameters that depend on the supplied parameter names. Returning an empty list if `name` is parametric parameter or doesn't exist in any parametric expressions.
+        r""" Gets the list of parametric parameters that depend on the supplied parameter names. Returning an empty list if `name` is parametric parameter or doesn't exist in any parametric expressions.
         
         :param \*names: The names of the parameters.
         :type \*names: str
@@ -772,7 +772,7 @@ class ParamCollection:
     ###################################################################################################################
     
     def paramSweepSpec(self, name, *sweep_params):
-        """ Convenience method to generate a sweep specification for use with :func:`ndSweep`.
+        r""" Convenience method to generate a sweep specification for use with :func:`ndSweep`.
         
         :param name: The name of the parameter to sweep.
         :type name: str
@@ -930,7 +930,7 @@ class ParamCollection:
         return self.getSymbolValues(*non_sweep)
     
     def collapsedIndices(self, *indices):
-        """ Computes the indices of the collapsed array for corresponding indices of the non-collapsed array. Should not be used by the user. Will be hidden in the future.
+        r""" Computes the indices of the collapsed array for corresponding indices of the non-collapsed array. Should not be used by the user. Will be hidden in the future.
         
         :param \*indices: Indices of the single parameter sweeps.
         :type \*indices: int, int ...
@@ -947,7 +947,7 @@ class ParamCollection:
         return sum([int(np.prod(Narr[i+1:]))*index for i, index in enumerate(list(indices))])
     
     def computeFuncSweep(self, func, spec, *fcn_args, **fcn_kwargs):
-        """ Compute a function over a sweep. Uses the collapsed grid created by :func:`ndSweep` internally.
+        r""" Compute a function over a sweep. Uses the collapsed grid created by :func:`ndSweep` internally.
         
         :param func: Function reference to compute over the sweep
         :type func: function

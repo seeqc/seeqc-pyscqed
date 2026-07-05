@@ -8,7 +8,7 @@ import itertools as itt
 import pickle
 
 def mdot(*args):
-    """ Compute a sequence of dot or matrix products.
+    r""" Compute a sequence of dot or matrix products.
     
     :param \*args: A sequence of numpy matrices to multiply in the order specified.
     :type \*args: np.ndarray, np.ndarray ...
@@ -302,7 +302,7 @@ def createSubspaceOperators(m00, m01, m10, m11):
     return ret
 
 def pauliCoefficients(E, V, basis_op):
-    """ Performs Hamiltonian reduction to a two-dimensional Hilbert space useful for describing qubits as spins. This function returns the Pauli coefficients :math:`h_\mathrm{x,y,z}` of the corresponding spin operators :math:`\hat{\sigma}_\mathrm{x,y,z}`. We use the 'local basis' approach developed by G. Consani :cite:`Consani2019` which is superior to traditional qubit circuit Hamiltonian reduction methods.
+    r""" Performs Hamiltonian reduction to a two-dimensional Hilbert space useful for describing qubits as spins. This function returns the Pauli coefficients :math:`h_\mathrm{x,y,z}` of the corresponding spin operators :math:`\hat{\sigma}_\mathrm{x,y,z}`. We use the 'local basis' approach developed by G. Consani :cite:`Consani2019` which is superior to traditional qubit circuit Hamiltonian reduction methods.
     
     :param E: A two-dimensional list of eigenvalues, the first index corresponding to the state number, and the second corresponding to the value of a swept variable, usually an external charge or flux depending on the qubit type.
     :type E: numpy.ndarray
