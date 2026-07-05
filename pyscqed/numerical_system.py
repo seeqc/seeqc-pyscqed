@@ -321,21 +321,21 @@ class NumericalSystem(TempData):
         parts = self._symbolic_parts
 
         # Substitute circuit parameters
-        self.Cinvnp = np.asmatrix(parts.inverse_capacitance_matrix.subs(subs), dtype=np.float64)
-        self.Linvnp = np.asmatrix(parts.inverse_inductance_matrix.subs(subs), dtype=np.float64)
+        self.Cinvnp = np.asarray(parts.inverse_capacitance_matrix.subs(subs), dtype=np.float64)
+        self.Linvnp = np.asarray(parts.inverse_inductance_matrix.subs(subs), dtype=np.float64)
         self.Jvecnp = np.asarray(parts.josephson_vector.subs(subs), dtype=np.float64)[:, 0]
         self.Pvecnp = np.asarray(parts.phase_slip_vector.subs(subs), dtype=np.float64)[:, 0]
 
         # Substitute external biases
-        self.Qbnp = np.asmatrix(parts.charge_bias_vector.subs(subs), dtype=np.float64) # x 2e
-        self.Qbtnp = np.asmatrix(
+        self.Qbnp = np.asarray(parts.charge_bias_vector.subs(subs), dtype=np.float64) # x 2e
+        self.Qbtnp = np.asarray(
             parts.branch_charge_bias_vector.subs(subs), dtype=np.float64
         ) # x 2e
-        self.Pbsm = np.asmatrix(parts.branch_flux_bias_matrix.subs(subs), dtype=np.float64)
-        self.Pbnp = np.asmatrix(
+        self.Pbsm = np.asarray(parts.branch_flux_bias_matrix.subs(subs), dtype=np.float64)
+        self.Pbnp = np.asarray(
             parts.branch_flux_bias_vector.subs(subs), dtype=np.float64
         ) # x Phi0
-        self.Pbinp = np.asmatrix(parts.inductive_flux_bias_vector.subs(subs), dtype=np.float64)
+        self.Pbinp = np.asarray(parts.inductive_flux_bias_vector.subs(subs), dtype=np.float64)
         
         # Generate exponentiated flux biases
         Pexp1 = []
@@ -356,7 +356,7 @@ class NumericalSystem(TempData):
         self.Qexp_mnp = Qexp2
         
         # Get branch inverse inductance matrix for branch current calculations
-        self.Linvnp_b = np.asmatrix(
+        self.Linvnp_b = np.asarray(
             parts.branch_inverse_inductance_matrix.subs(subs), dtype=np.float64
         )
     
@@ -873,18 +873,18 @@ class NumericalSystem(TempData):
         substitutions = sweep_config.getSweptSymbols()
         
         # Substitute circuit parameters
-        self.Cinvnp = np.asmatrix(self.Cinv_pre.subs(substitutions), dtype=np.float64)
-        self.Linvnp = np.asmatrix(self.Linv_pre.subs(substitutions), dtype=np.float64)
+        self.Cinvnp = np.asarray(self.Cinv_pre.subs(substitutions), dtype=np.float64)
+        self.Linvnp = np.asarray(self.Linv_pre.subs(substitutions), dtype=np.float64)
         self.Jvecnp = np.asarray(self.Jvec_pre.subs(substitutions), dtype=np.float64)[:, 0]
         self.Pvecnp = np.asarray(self.Pvec_pre.subs(substitutions), dtype=np.float64)[:, 0]
-        self.Linvnp_b = np.asmatrix(self.Linv_b_pre.subs(substitutions), dtype=np.float64)
+        self.Linvnp_b = np.asarray(self.Linv_b_pre.subs(substitutions), dtype=np.float64)
         
         # Substitute external biases
-        self.Qbnp = np.asmatrix(self.Qb_pre.subs(substitutions), dtype=np.float64) # x 2e
-        self.Qbtnp = np.asmatrix(self.Qbt_pre.subs(substitutions), dtype=np.float64) # x 2e
-        self.Pbsm = np.asmatrix(self.Pbm_pre.subs(substitutions), dtype=np.float64)
+        self.Qbnp = np.asarray(self.Qb_pre.subs(substitutions), dtype=np.float64) # x 2e
+        self.Qbtnp = np.asarray(self.Qbt_pre.subs(substitutions), dtype=np.float64) # x 2e
+        self.Pbsm = np.asarray(self.Pbm_pre.subs(substitutions), dtype=np.float64)
         #self.Pbnp = np.asmatrix(self.Pb_pre.subs(subs), dtype=np.float64) # x Phi0
-        self.Pbinp = np.asmatrix(self.Pbi_pre.subs(substitutions), dtype=np.float64)
+        self.Pbinp = np.asarray(self.Pbi_pre.subs(substitutions), dtype=np.float64)
         
         # Generate exponentiated flux biases
         Pexp1 = []

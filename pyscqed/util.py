@@ -293,7 +293,7 @@ def createSubspaceOperators(m00, m01, m10, m11):
     Op = None
     ret = []
     for i in range(len(m00)):
-        Op = np.asmatrix(np.eye(2), dtype=np.complex64)
+        Op = np.asarray(np.eye(2), dtype=np.complex64)
         Op[0, 0] = m00[i]
         Op[0, 1] = m01[i]
         Op[1, 0] = m10[i]
@@ -320,7 +320,7 @@ def pauliCoefficients(E, V, basis_op):
     """
     
     def get_subspace_operator(V0, V1, Oq, i):
-        Op = np.asmatrix(np.eye(2), dtype=np.complex64)
+        Op = np.asarray(np.eye(2), dtype=np.complex64)
         Op[0, 0] = Oq.matrix_element(V0, V0)
         Op[0, 1] = Oq.matrix_element(V0, V1)
         Op[1, 0] = Oq.matrix_element(V1, V0)
@@ -341,9 +341,9 @@ def pauliCoefficients(E, V, basis_op):
         raise Exception("incompatible input types for E (%s), V (%s) and basis_op (%s)." % (type(E), type(V), type(basis_op)))
     
     # Get Paulis
-    ox = np.asmatrix(qt.sigmax().data.to_array(), dtype=np.complex64)
-    oy = np.asmatrix(qt.sigmay().data.to_array(), dtype=np.complex64)
-    oz = np.asmatrix(qt.sigmaz().data.to_array(), dtype=np.complex64)
+    ox = np.asarray(qt.sigmax().data.to_array(), dtype=np.complex64)
+    oy = np.asarray(qt.sigmay().data.to_array(), dtype=np.complex64)
+    oz = np.asarray(qt.sigmaz().data.to_array(), dtype=np.complex64)
     
     # Get ground and first excited states
     E0 = E[0, :]
@@ -379,19 +379,19 @@ def pauliCoefficients(E, V, basis_op):
         Vl = np.array([np.abs(Vl[0, k])/Vl[0, k] * Vl[:, k] for k in (0, 1)])
         
         # Create the unitary
-        U = np.asmatrix(Vl.T, dtype=np.complex64)
+        U = np.asarray(Vl.T, dtype=np.complex64)
         Udag = U.conjugate().T
-        
+
         # Create Hq prime
-        Hqp = np.asmatrix(np.diag([E0[i], E1[i]]), dtype=np.complex64)
-        
+        Hqp = np.asarray(np.diag([E0[i], E1[i]]), dtype=np.complex64)
+
         # Apply the transformation
         Hq = mdot(Udag, Hqp, U)
-        
+
         # Do the projection
-        hx.append(np.real(0.5*np.dot(Hq, ox).trace()[0, 0]))
-        hy.append(np.real(0.5*np.dot(Hq, oy).trace()[0, 0]))
-        hz.append(np.real(0.5*np.dot(Hq, oz).trace()[0, 0]))
+        hx.append(np.real(0.5*np.dot(Hq, ox).trace()))
+        hy.append(np.real(0.5*np.dot(Hq, oy).trace()))
+        hz.append(np.real(0.5*np.dot(Hq, oz).trace()))
     return np.array(hx), np.array(hy), np.array(hz)
 
 def getEigenValuesAndVectors(sweep):
