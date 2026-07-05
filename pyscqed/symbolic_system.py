@@ -635,7 +635,7 @@ class SymbolicSystem(ParamCollection):
     
     def _get_topology_matrices(self):
         # nx incidence matrix is Nn rows by Nb columns
-        I = np.array(nx.incidence_matrix(self.CG.sc_spanning_tree_wc, oriented=True).todense()*-1)
+        I = nx.incidence_matrix(self.CG.sc_spanning_tree_wc, oriented=True).toarray() * -1
         
         # Remove the row that corresponds to the ground node
         nodes = list(self.CG.sc_spanning_tree_wc.nodes)

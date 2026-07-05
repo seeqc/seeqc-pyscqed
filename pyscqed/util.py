@@ -27,21 +27,21 @@ def hdot(m1, m2):
     """ Compute the Hadamard product of two matrices.
     
     :param m1: The first matrix.
-    :type m1: np.ndarray, np.matrix, list
-    
+    :type m1: np.ndarray, list
+
     :param m2: The second matrix.
-    :type m2: np.ndarray, np.matrix, list
-    
+    :type m2: np.ndarray, list
+
     :return: The Hadamard product of two matrices.
-    :rtype: np.matrix
+    :rtype: np.ndarray
     """
-    return np.matrix(np.array(m1) * np.array(m2))
+    return np.array(m1) * np.array(m2)
 
 def sanArray(a, tol=1e-10):
     """ Sanitizes an array `a` by setting values less than `tol` to zero, including the imaginary component.
     
     :param a: The input array.
-    :type a: np.ndarray, np.matrix, list
+    :type a: np.ndarray, list
     
     :param tol: The cutoff below which values are set to zero.
     :type tol: float
@@ -501,7 +501,7 @@ def _get_permutation_matrices(M):
     a = np.arange(M)
     perm_mat = []
     for j in range(M):
-        mat = np.matrix([[0.0]*M]*M)
+        mat = np.zeros((M, M))
         b = np.roll(a,j)
         for i in range(M):
             mat[a[i],b[i]] = 1.0
