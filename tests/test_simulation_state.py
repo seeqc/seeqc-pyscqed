@@ -4,7 +4,7 @@ import numpy as np
 
 from pyscqed.circuit_graph import CircuitGraph
 from pyscqed.symbolic_system import SymbolicSystem
-from pyscqed.simulation_state import _SymbolicParts
+from pyscqed.simulation_state import _MixedParts, _NumericalParts, _SymbolicParts
 from pyscqed.numerical_system import NumericalSystem
 
 
@@ -18,6 +18,28 @@ def get_single_node_graph() -> CircuitGraph:
 
 def get_symbolic_system() -> SymbolicSystem:
     return SymbolicSystem(get_single_node_graph())
+
+
+def get_initialized_symbolic_system() -> SymbolicSystem:
+    symbolic = get_symbolic_system()
+    symbolic.setParameterValue("C", 20.0)
+    symbolic.setParameterValue("I", 40e-3)
+    symbolic.setParameterValue("L", 50.0)
+    return symbolic
+
+
+SYMBOLIC_PART_ATTRIBUTES = [
+    "inverse_capacitance_matrix",
+    "inverse_inductance_matrix",
+    "branch_inverse_inductance_matrix",
+    "josephson_vector",
+    "phase_slip_vector",
+    "charge_bias_vector",
+    "branch_charge_bias_vector",
+    "branch_flux_bias_vector",
+    "branch_flux_bias_matrix",
+    "inductive_flux_bias_vector",
+]
 
 
 def test_simulation_state_attributes_match_symbolic_system():
@@ -70,3 +92,115 @@ def test_numerical_system_spectrum_unchanged():
     energies, _ = hamil.diagonalize(H)
     expected = [59.95010688, 219.58210001, 379.20831265, 538.82879099, 698.44358094]
     assert np.allclose(energies.data, expected, rtol=0, atol=1e-6)
+
+
+def test_mixed_parts_applies_substitutions():
+    symbolic = get_initialized_symbolic_system()
+    subs = symbolic.getSymbolValuesDict()
+    expected = _SymbolicParts(symbolic)
+    mixed = _MixedParts(symbolic, subs)
+    for name in SYMBOLIC_PART_ATTRIBUTES:
+        assert getattr(mixed, name) == getattr(expected, name).subs(subs)
+
+
+def test_mixed_parts_empty_substitutions_match_symbolic_parts():
+    symbolic = get_symbolic_system()
+    expected = _SymbolicParts(symbolic)
+    mixed = _MixedParts(symbolic, {})
+    for name in SYMBOLIC_PART_ATTRIBUTES:
+        assert getattr(mixed, name) == getattr(expected, name)
+
+
+def test_mixed_parts_rejects_non_symbolic_system():
+    with pytest.raises(TypeError):
+        _MixedParts(get_single_node_graph(), {})
+
+
+def test_numerical_parts_from_symbolic_parts():
+    symbolic = get_initialized_symbolic_system()
+    subs = symbolic.getSymbolValuesDict()
+    parts = _SymbolicParts(symbolic)
+    numeric = _NumericalParts(parts, subs)
+
+    assert np.allclose(
+        numeric.inverse_capacitance_matrix,
+        np.asarray(parts.inverse_capacitance_matrix.subs(subs), dtype=np.float64)
+    )
+    assert np.allclose(
+        numeric.inverse_inductance_matrix,
+        np.asarray(parts.inverse_inductance_matrix.subs(subs), dtype=np.float64)
+    )
+    assert np.allclose(
+        numeric.branch_inverse_inductance_matrix,
+        np.asarray(parts.branch_inverse_inductance_matrix.subs(subs), dtype=np.float64)
+    )
+    assert numeric.josephson_vector.ndim == 1
+    assert np.allclose(
+        numeric.josephson_vector,
+        np.asarray(parts.josephson_vector.subs(subs), dtype=np.float64)[:, 0]
+    )
+    assert numeric.phase_slip_vector.ndim == 1
+    assert np.allclose(
+        numeric.phase_slip_vector,
+        np.asarray(parts.phase_slip_vector.subs(subs), dtype=np.float64)[:, 0]
+    )
+    assert np.allclose(
+        numeric.charge_bias_vector,
+        np.asarray(parts.charge_bias_vector.subs(subs), dtype=np.float64)
+    )
+    assert np.allclose(
+        numeric.branch_charge_bias_vector,
+        np.asarray(parts.branch_charge_bias_vector.subs(subs), dtype=np.float64)
+    )
+    assert np.allclose(
+        numeric.branch_flux_bias_matrix,
+        np.asarray(parts.branch_flux_bias_matrix.subs(subs), dtype=np.float64)
+    )
+    assert np.allclose(
+        numeric.inductive_flux_bias_vector,
+        np.asarray(parts.inductive_flux_bias_vector.subs(subs), dtype=np.float64)
+    )
+
+    flux_diag = np.diag(numeric.branch_flux_bias_matrix)
+    assert np.allclose(
+        numeric.positive_flux_bias_exponentials, np.exp(2j*np.pi*flux_diag))
+    assert np.allclose(
+        numeric.negative_flux_bias_exponentials, np.exp(-2j*np.pi*flux_diag))
+    charges = numeric.branch_charge_bias_vector[:, 0]
+    assert np.allclose(
+        numeric.positive_charge_bias_exponentials, np.exp(2j*np.pi*charges))
+    assert np.allclose(
+        numeric.negative_charge_bias_exponentials, np.exp(-2j*np.pi*charges))
+
+
+def test_numerical_parts_from_mixed_parts_matches_full_substitution():
+    symbolic = get_initialized_symbolic_system()
+    subs = symbolic.getSymbolValuesDict()
+    full = _NumericalParts(_SymbolicParts(symbolic), subs)
+
+    static = {k: v for k, v in subs.items() if str(k) == "C"}
+    swept = {k: v for k, v in subs.items() if str(k) != "C"}
+    numeric = _NumericalParts(_MixedParts(symbolic, static), swept)
+
+    assert np.allclose(
+        numeric.inverse_capacitance_matrix, full.inverse_capacitance_matrix)
+    assert np.allclose(numeric.josephson_vector, full.josephson_vector)
+    assert np.allclose(
+        numeric.branch_charge_bias_vector, full.branch_charge_bias_vector)
+
+
+def test_numerical_parts_rejects_invalid_source():
+    symbolic = get_initialized_symbolic_system()
+    with pytest.raises(TypeError):
+        _NumericalParts(symbolic, {})
+
+    with pytest.raises(TypeError):
+        _NumericalParts(None, {})
+
+
+def test_numerical_system_substitute_populates_numerical_parts():
+    hamil = NumericalSystem(get_symbolic_system())
+    hamil.configureOperator(1, 40, "charge")
+    hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
+    hamil.substitute()
+    assert isinstance(hamil._numerical_parts, _NumericalParts)

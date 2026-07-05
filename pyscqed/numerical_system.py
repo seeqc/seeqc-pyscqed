@@ -9,7 +9,7 @@ import time
 
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
-from .simulation_state import _SymbolicParts
+from .simulation_state import _MixedParts, _NumericalParts, _SymbolicParts
 from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk, SweepResultFromMemory
 from .evaluation_graph import EvaluationGraph
 from .result import EigenvalueResult, EigenvectorResult, FunctionResult
@@ -316,70 +316,39 @@ class NumericalSystem(TempData):
     #       Numerical Hamiltonian Generation
     ###################################################################################################################
     def substitute(self):
-        
-        subs = self.SS.getSymbolValuesDict()
-        parts = self._symbolic_parts
-
-        # Substitute circuit parameters
-        self.Cinvnp = np.asarray(parts.inverse_capacitance_matrix.subs(subs), dtype=np.float64)
-        self.Linvnp = np.asarray(parts.inverse_inductance_matrix.subs(subs), dtype=np.float64)
-        self.Jvecnp = np.asarray(parts.josephson_vector.subs(subs), dtype=np.float64)[:, 0]
-        self.Pvecnp = np.asarray(parts.phase_slip_vector.subs(subs), dtype=np.float64)[:, 0]
-
-        # Substitute external biases
-        self.Qbnp = np.asarray(parts.charge_bias_vector.subs(subs), dtype=np.float64) # x 2e
-        self.Qbtnp = np.asarray(
-            parts.branch_charge_bias_vector.subs(subs), dtype=np.float64
-        ) # x 2e
-        self.Pbsm = np.asarray(parts.branch_flux_bias_matrix.subs(subs), dtype=np.float64)
-        self.Pbnp = np.asarray(
-            parts.branch_flux_bias_vector.subs(subs), dtype=np.float64
-        ) # x Phi0
-        self.Pbinp = np.asarray(parts.inductive_flux_bias_vector.subs(subs), dtype=np.float64)
-        
-        # Generate exponentiated flux biases
-        Pexp1 = []
-        Pexp2 = []
-        for i in range(self.Pbsm.shape[0]):
-            Pexp1.append(np.exp(2j*np.pi*self.Pbsm[i, i]))
-            Pexp2.append(np.exp(-2j*np.pi*self.Pbsm[i, i]))
-        self.Pexp_pnp = Pexp1
-        self.Pexp_mnp = Pexp2
-        
-        # Generate exponentiated charge biases
-        Qexp1 = []
-        Qexp2 = []
-        for i in range(self.Qbtnp.shape[0]):
-            Qexp1.append(np.exp(2j*np.pi*self.Qbtnp[i, 0]))
-            Qexp2.append(np.exp(-2j*np.pi*self.Qbtnp[i, 0]))
-        self.Qexp_pnp = Qexp1
-        self.Qexp_mnp = Qexp2
-        
-        # Get branch inverse inductance matrix for branch current calculations
-        self.Linvnp_b = np.asarray(
-            parts.branch_inverse_inductance_matrix.subs(subs), dtype=np.float64
+        """ Substitutes all current parameter values into the symbolic expressions, collecting
+        the numerical arrays into a :class:`~pyscqed.simulation_state._NumericalParts`
+        instance. """
+        self._numerical_parts = _NumericalParts(
+            self._symbolic_parts, self.SS.getSymbolValuesDict()
         )
     
     def getLinearPart(self):
+        parts = self._numerical_parts
+        Q = self.Qnp + parts.charge_bias_vector
+        P = self.Pnp + parts.inductive_flux_bias_vector
+
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
-        util.mdot((self.Qnp + self.Qbnp).T, self.Cinvnp, self.Qnp + self.Qbnp)[0, 0]
-        
+        util.mdot(Q.T, parts.inverse_capacitance_matrix, Q)[0, 0]
+
         # Get flux energy
         Hf = self.units.getPrefactor("El")*0.5*\
-        util.mdot((self.Pnp + self.Pbinp).T, self.Linvnp, self.Pnp + self.Pbinp)[0, 0]
-        
+        util.mdot(P.T, parts.inverse_inductance_matrix, P)[0, 0]
+
         return Hq + Hf
     
     def getStaticJosephsonPart(self):
+        Jvec = self._numerical_parts.josephson_vector
+
         # Need the branch DoFs in the possibly transformed representation
         Pp = self.SS.Rnb*self.SS.Rinv*self.SS.node_vector
-        
+
         # Get the Josephson energy
         Hj_l = []
         Hj_r = []
         for i, edge in enumerate(self.SS.edges):
-            if self.Jvecnp[i] == 0.0:
+            if Jvec[i] == 0.0:
                 continue
             prod1 = 0.0
             prod2 = 0.0
@@ -412,8 +381,8 @@ class NumericalSystem(TempData):
                     prod1 *= self.circ_operators[node]["disp_adj"]
                     prod2 *= self.circ_operators[node]["disp"]
         
-            Hj_l.append(-0.5*self.units.getPrefactor("Ej")*self.Jvecnp[i]*prod1)
-            Hj_r.append(-0.5*self.units.getPrefactor("Ej")*self.Jvecnp[i]*prod2)
+            Hj_l.append(-0.5*self.units.getPrefactor("Ej")*Jvec[i]*prod1)
+            Hj_r.append(-0.5*self.units.getPrefactor("Ej")*Jvec[i]*prod2)
         return Hj_l, Hj_r
     
     ###################################################################################################################
@@ -421,25 +390,29 @@ class NumericalSystem(TempData):
     ###################################################################################################################
     
     def getHamiltonian(self) -> qt.Qobj:
+        parts = self._numerical_parts
+        Q = self.Qnp + parts.charge_bias_vector
+        P = self.Pnp + parts.inductive_flux_bias_vector
+
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
-        util.mdot((self.Qnp + self.Qbnp).T, self.Cinvnp, self.Qnp + self.Qbnp)[0, 0]
-        
+        util.mdot(Q.T, parts.inverse_capacitance_matrix, Q)[0, 0]
+
         # Get flux energy
         Hf = self.units.getPrefactor("El")*0.5*\
-        util.mdot((self.Pnp + self.Pbinp).T, self.Linvnp, self.Pnp + self.Pbinp)[0, 0]
-        
+        util.mdot(P.T, parts.inverse_inductance_matrix, P)[0, 0]
+
         # Need the branch DoFs in the possibly transformed representation
         Pp = self.SS.Rnb*self.SS.Rinv*self.SS.node_vector
-        
+
         # Get the Josephson energy
         Hj = 0
         for i, edge in enumerate(self.SS.edges):
-            if self.Jvecnp[i] == 0.0:
+            if parts.josephson_vector[i] == 0.0:
                 continue
-            
-            prod1 = self.Pexp_pnp[i]
-            prod2 = self.Pexp_mnp[i]
+
+            prod1 = parts.positive_flux_bias_exponentials[i]
+            prod2 = parts.negative_flux_bias_exponentials[i]
             if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
                 # Left
                 for arg in Pp[i].args:
@@ -465,17 +438,17 @@ class NumericalSystem(TempData):
                     prod1 *= self.circ_operators[node]["disp_adj"]
                     prod2 *= self.circ_operators[node]["disp"]
         
-            Hj += -0.5*self.Jvecnp[i]*(prod1 + prod2)
+            Hj += -0.5*parts.josephson_vector[i]*(prod1 + prod2)
         Hj *= self.units.getPrefactor("Ej")
         
         # Get the Phaseslip energy
         Hp = 0
         for i, edge in enumerate(self.SS.edges):
-            if self.Pvecnp[i] == 0.0:
+            if parts.phase_slip_vector[i] == 0.0:
                 continue
-            
-            prod1 = self.Qexp_pnp[i]
-            prod2 = self.Qexp_mnp[i]
+
+            prod1 = parts.positive_charge_bias_exponentials[i]
+            prod2 = parts.negative_charge_bias_exponentials[i]
             if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
                 # Left
                 for arg in Pp[i].args:
@@ -501,13 +474,15 @@ class NumericalSystem(TempData):
                     prod1 *= self.circ_operators[node]["pdisp_adj"]
                     prod2 *= self.circ_operators[node]["pdisp"]
         
-            Hp += -0.5*self.Pvecnp[i]*(prod1 + prod2)
+            Hp += -0.5*parts.phase_slip_vector[i]*(prod1 + prod2)
         Hp *= self.units.getPrefactor("Ep")
         
         # Total Hamiltonian
         return (Hq + Hf + Hj + Hp).tidyup(_qobj_atol)
     
     def getCurrentOperator(self, edge=None) -> qt.Qobj:
+        parts = self._numerical_parts
+
         # Check edge
         if edge is None:
             raise Exception("No edge specified for branch current operator.")
@@ -531,13 +506,14 @@ class NumericalSystem(TempData):
                 sum1 = float(Pp[i].args[0]) * self.circ_operators[node]["flux"]
             
             # Take difference of node fluxes of corresponding branch and use *branch* inverse inductance matrix
-            return self.units.getPrefactor("IopL") * sum1 * self.Linvnp_b[i, i]
+            return self.units.getPrefactor("IopL") * sum1 * \
+                parts.branch_inverse_inductance_matrix[i, i]
         
         elif self.getCircuitGraph().isJosephsonEdge(edge):
             
             # Get the Josephson operators
-            prod1 = self.Pexp_pnp[i]
-            prod2 = self.Pexp_mnp[i]
+            prod1 = parts.positive_flux_bias_exponentials[i]
+            prod2 = parts.negative_flux_bias_exponentials[i]
             if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
                 # Left
                 for arg in Pp[i].args:
@@ -563,7 +539,8 @@ class NumericalSystem(TempData):
                     prod1 *= self.circ_operators[node]["disp_adj"]
                     prod2 *= self.circ_operators[node]["disp"]
         
-            return 0.5j * self.units.getPrefactor("IopJ") * self.Jvecnp[i] * (prod1 - prod2)
+            return 0.5j * self.units.getPrefactor("IopJ") * \
+                parts.josephson_vector[i] * (prod1 - prod2)
         else:
             raise Exception("Edge %s is not current-carrying" % repr(edge))
     
@@ -589,10 +566,12 @@ class NumericalSystem(TempData):
         i = self.getNodeIndex(node)
         
         # Get charge superoperator including charge offsets
-        Q = self.Qnp + self.Qbnp
-        
+        parts = self._numerical_parts
+        Q = self.Qnp + parts.charge_bias_vector
+
         # Use the inverse capacitance matrix
-        return self.units.getPrefactor("Vop") * Q[i, 0] * self.Cinvnp[i, i]
+        return self.units.getPrefactor("Vop") * Q[i, 0] * \
+            parts.inverse_capacitance_matrix[i, i]
     
     def getVoltageMatrixElement(self, energies: EigenvalueResult, vectors: EigenvectorResult, node=None, elements=None):
         # Get the relevant operator
@@ -608,44 +587,48 @@ class NumericalSystem(TempData):
         return result
     
     def getChargingEnergies(self, node=None):
+        Cinv = self._numerical_parts.inverse_capacitance_matrix
         if node is None:
             ret = {}
             for i, pos in enumerate(self.getNodeList()):
-                ret[pos] = 0.5 * self.Cinvnp[i, i] * self.units.getPrefactor("Ec")
+                ret[pos] = 0.5 * Cinv[i, i] * self.units.getPrefactor("Ec")
             return ret
         else:
             i = self.getNodeList().index(node)
-            return 0.5 * self.Cinvnp[i, i] * self.units.getPrefactor("Ec")
+            return 0.5 * Cinv[i, i] * self.units.getPrefactor("Ec")
     
     def getFluxEnergies(self, node=None):
+        Linv = self._numerical_parts.inverse_inductance_matrix
         if node is None:
             ret = {}
             for i, pos in enumerate(self.getNodeList()):
-                ret[pos] = 0.5 * self.Linvnp[i, i] * self.units.getPrefactor("El")
+                ret[pos] = 0.5 * Linv[i, i] * self.units.getPrefactor("El")
             return ret
         else:
             i = self.getNodeList().index(node)
-            return 0.5 * self.Linvnp[i, i] * self.units.getPrefactor("El")
+            return 0.5 * Linv[i, i] * self.units.getPrefactor("El")
     
     def getJosephsonEnergies(self, edge=None):
+        Jvec = self._numerical_parts.josephson_vector
         if edge is None:
             ret = {}
             for i, edge in enumerate(self.SS.edges):
-                ret[edge] = self.Jvecnp[i] * self.units.getPrefactor("Ej")
+                ret[edge] = Jvec[i] * self.units.getPrefactor("Ej")
             return ret
         else:
             i = self.SS.edges.index(edge)
-            return self.Jvecnp[i] * self.units.getPrefactor("Ej")
+            return Jvec[i] * self.units.getPrefactor("Ej")
     
     def getPhaseSlipEnergies(self, edge=None):
+        Pvec = self._numerical_parts.phase_slip_vector
         if edge is None:
             ret = {}
             for i, edge in enumerate(self.SS.edges):
-                ret[edge] = self.Pvecnp[i] * self.units.getPrefactor("Ep")
+                ret[edge] = Pvec[i] * self.units.getPrefactor("Ep")
             return ret
         else:
             i = self.SS.edges.index(edge)
-            return self.Pvecnp[i] * self.units.getPrefactor("Ep")
+            return Pvec[i] * self.units.getPrefactor("Ep")
     
     def getResonatorResponse(
         self,
@@ -668,7 +651,7 @@ class NumericalSystem(TempData):
         
         # Get the operator associated with selected node
         index = self.getNodeList().index(cpl_node)
-        Op = self.Qnp[index, 0] + self.Qbnp[index, 0]
+        Op = self.Qnp[index, 0] + self._numerical_parts.charge_bias_vector[index, 0]
         
         # Get coupling terms
         E = energies.data - energies.data[0]
@@ -832,23 +815,9 @@ class NumericalSystem(TempData):
             return SweepResultFromMemory(sweep_config, results)
     
     def _perform_pre_sweep_substitutions(self, sweep_config: SweepConfig):
-        # Get the static parameters
-        substitutions = sweep_config.getStaticSymbols()
+        # Substitute the static parameters, leaving the swept symbols free
+        self._mixed_parts = _MixedParts(self.SS, sweep_config.getStaticSymbols())
 
-        # Generate final symbolic expressions
-        self.Cinv_pre = self.SS.getInverseCapacitanceMatrix().subs(substitutions)
-        self.Linv_pre = self.SS.getInverseInductanceMatrix().subs(substitutions)
-
-        # Get branch inverse inductance matrix for branch current calculations
-        self.Linv_b_pre = self.SS.getInverseInductanceMatrix(mode='branch').subs(substitutions)
-        
-        self.Jvec_pre = self.SS.getJosephsonVector().subs(substitutions)
-        self.Pvec_pre = self.SS.getPhaseSlipVector().subs(substitutions)
-        self.Qb_pre = self.SS.getChargeBiasVector().subs(substitutions)
-        self.Qbt_pre = self.SS.Rnb*self.SS.getChargeBiasVector().subs(substitutions)
-        self.Pbm_pre = self.SS.getFluxBiasMatrix(mode="branch").subs(substitutions)
-        self.Pbi_pre = self.SS.getFluxBiasVectorInd().subs(substitutions)
-        
         # Find which operators will need to be regenerated for each sweep
         self._get_dynamic_node_dofs(sweep_config)
     
@@ -869,41 +838,11 @@ class NumericalSystem(TempData):
                 self.regen_nodes.append(node)
     
     def _perform_sweep_point_substitutions(self, sweep_config: SweepConfig):
-        # Get the subs
-        substitutions = sweep_config.getSweptSymbols()
-        
-        # Substitute circuit parameters
-        self.Cinvnp = np.asarray(self.Cinv_pre.subs(substitutions), dtype=np.float64)
-        self.Linvnp = np.asarray(self.Linv_pre.subs(substitutions), dtype=np.float64)
-        self.Jvecnp = np.asarray(self.Jvec_pre.subs(substitutions), dtype=np.float64)[:, 0]
-        self.Pvecnp = np.asarray(self.Pvec_pre.subs(substitutions), dtype=np.float64)[:, 0]
-        self.Linvnp_b = np.asarray(self.Linv_b_pre.subs(substitutions), dtype=np.float64)
-        
-        # Substitute external biases
-        self.Qbnp = np.asarray(self.Qb_pre.subs(substitutions), dtype=np.float64) # x 2e
-        self.Qbtnp = np.asarray(self.Qbt_pre.subs(substitutions), dtype=np.float64) # x 2e
-        self.Pbsm = np.asarray(self.Pbm_pre.subs(substitutions), dtype=np.float64)
-        #self.Pbnp = np.asmatrix(self.Pb_pre.subs(subs), dtype=np.float64) # x Phi0
-        self.Pbinp = np.asarray(self.Pbi_pre.subs(substitutions), dtype=np.float64)
-        
-        # Generate exponentiated flux biases
-        Pexp1 = []
-        Pexp2 = []
-        for i in range(self.Pbsm.shape[0]):
-            Pexp1.append(np.exp(2j*np.pi*self.Pbsm[i, i]))
-            Pexp2.append(np.exp(-2j*np.pi*self.Pbsm[i, i]))
-        self.Pexp_pnp = Pexp1
-        self.Pexp_mnp = Pexp2
-        
-        # Generate exponentiated charge biases
-        Qexp1 = []
-        Qexp2 = []
-        for i in range(self.Qbtnp.shape[0]):
-            Qexp1.append(np.exp(2j*np.pi*self.Qbtnp[i, 0]))
-            Qexp2.append(np.exp(-2j*np.pi*self.Qbtnp[i, 0]))
-        self.Qexp_pnp = Qexp1
-        self.Qexp_mnp = Qexp2
-        
+        # Substitute the swept parameter values at the current sweep point
+        self._numerical_parts = _NumericalParts(
+            self._mixed_parts, sweep_config.getSweptSymbols()
+        )
+
         # Regenerate operators if required
         if self.regen_nodes != []:
             self.getExpandedOperatorsMap(self.regen_nodes)
@@ -1152,7 +1091,8 @@ class ClassicalPotentialBuilder:
         self._hamil = hamil
         self._dof_map = {}
         self._critical_currents = self._hamil.getPrefactor('Ej') * self._get_critical_currents()
-        self._inverse_inductance_matrix = 0.5 * hamil.getPrefactor('El') * self._hamil.Linvnp
+        self._inverse_inductance_matrix = 0.5 * hamil.getPrefactor('El') * \
+            self._hamil._numerical_parts.inverse_inductance_matrix
         self._dof_symbol_vector = self._hamil.SS.getFluxVector(mode="branch") + \
                                  self._hamil.SS.getFluxBiasVector(mode="branch")
         self._get_input_format()
