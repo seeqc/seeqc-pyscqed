@@ -169,8 +169,9 @@ def test_numerical_parts_from_mixed_parts_matches_full_substitution():
     subs = symbolic.getSymbolValuesDict()
     full = _NumericalParts(_SymbolicParts(symbolic), subs)
 
-    static = {k: v for k, v in subs.items() if str(k) == "C"}
-    swept = {k: v for k, v in subs.items() if str(k) != "C"}
+    C = symbolic.getSymbol("C")
+    static = {C: subs[C]}
+    swept = {k: v for k, v in subs.items() if k != C}
     numeric = _NumericalParts(_MixedParts(symbolic, static), swept)
 
     assert np.allclose(

@@ -9,6 +9,7 @@ import time
 
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
+from .operators import ChargeBasisOperators, OscillatorBasisOperators, _qobj_atol
 from .simulation_state import _MixedParts, _NumericalParts, _SymbolicParts
 from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk, SweepResultFromMemory
 from .evaluation_graph import EvaluationGraph
@@ -17,9 +18,6 @@ from .units import Units
 from . import physical_constants as pc
 from . import util
 from . import units
-
-# Local override for the Qobj tolerance. The global settings appear to not work
-_qobj_atol = 1e-12
 
 
 class HamiltonianSpectrum(EvaluationGraph):
@@ -101,13 +99,8 @@ class NumericalSystem(TempData):
         :rtype: int
         """
         ret = 1
-        for k, v in self.operator_data.items():
-            trunc = v["truncation"]
-            basis = v["basis"]
-            if basis == "charge":
-                ret *= (2*trunc+1)
-            elif basis == "oscillator":
-                ret *= (trunc)
+        for v in self.operator_data.values():
+            ret *= v.dimension
         return ret
     
     def sparsity(self, op):
@@ -139,42 +132,20 @@ class NumericalSystem(TempData):
     def configureOperator(self, node, trunc, basis):
         if node not in self.getNodeList():
             raise Exception("Node '%i' is not a valid circuit node." % node)
-        if basis not in ("charge", "oscillator"):
-            raise Exception("Unrecognized basis representation '%s'." % repr(basis))
-
-        # Get the operator circuit-dependent parameters
-        impedance = None
-        frequency = None
-        if basis == "oscillator":
-            index = self.getNodeIndex(node)
-            Linv = self._symbolic_parts.inverse_inductance_matrix
-            Cinv = self._symbolic_parts.inverse_capacitance_matrix
-            frequency = sy.sqrt(Linv[index, index]*Cinv[index, index])
-            freq = "fosc%i" % node
-            self.SS.addParameter(freq)
-            self.SS.addParameterisation(freq, frequency)
-            impedance = sy.sqrt(Cinv[index, index]/Linv[index, index])
-            impe = "Zosc%i" % node
-            self.SS.addParameter(impe)
-            self.SS.addParameterisation(impe, impedance)
-
-        self.operator_data[node] = {
-            "truncation": trunc,
-            "basis": basis,
-            "impedance": impedance,
-            "frequency": frequency
-        }
-
-    def getOperatorList(self, node):
-        basis = self.operator_data[node]["basis"]
-        # FIXME: Determine if we need to generate all the operators for this node
-
         if basis == "charge":
-            return self._get_charge_basis(node)
+            self.operator_data[node] = ChargeBasisOperators(node, trunc)
         elif basis == "oscillator":
-            return self._get_oscillator_basis(node)
+            self.operator_data[node] = OscillatorBasisOperators(
+                node, trunc, self.SS, self.units
+            )
         else:
             raise Exception("Unrecognized basis representation '%s'." % repr(basis))
+
+    def getOperatorList(self, node):
+        # FIXME: Determine if we need to generate all the operators for this node
+        ops = self.operator_data[node]
+        ops.generate()
+        return ops.Q, ops.P, ops.D, ops.Ddag
     
     ## Expand operator Hilbert spaces and update mapping to associated symbols
     def getExpandedOperatorsMap(self, nodes=None):
@@ -189,12 +160,7 @@ class NumericalSystem(TempData):
         # Generate the Hilbert space expanders
         Ilist = np.empty([len(node_list)], dtype=np.dtype(qt.Qobj))
         for i, node in enumerate(node_list):
-            trunc = self.operator_data[node]["truncation"]
-            basis = self.operator_data[node]["basis"]
-            if basis == "oscillator":
-                Ilist[i] = qt.qeye(trunc)
-            elif basis == "charge":
-                Ilist[i] = qt.qeye(2*trunc + 1)
+            Ilist[i] = self.operator_data[node].getIdentity()
         
         # Create mode operators
         Olist = np.empty([len(node_list)], dtype=np.dtype(qt.Qobj))
@@ -206,8 +172,6 @@ class NumericalSystem(TempData):
                     continue
             
             op_dict = {}
-            trunc = self.operator_data[node]["truncation"]
-            basis = self.operator_data[node]["basis"]
             Q, P, D, Ddag = self.getOperatorList(node)
             
             # Indices minus the current index
@@ -254,13 +218,6 @@ class NumericalSystem(TempData):
         for node in self.getNodeList():
             arr.append(pos_ops[node])
         self.Pnp = self._init_qobj_vector(arr, dtype=object)
-    
-    def getBasisPrefactors(self):
-        Zpref = sy.eye(self.SS.Nn)
-        for i, node in enumerate(self.SS.nodes):
-            if self.operator_data[node]["basis"] == "oscillator":
-                Zpref[i, i] = self.operator_data[node]["impedance"]
-        return Zpref
     
     def getSymbolicExpressions(self):
         """ Collects the symbolic expressions required to build the numerical Hamiltonian
@@ -763,11 +720,8 @@ class NumericalSystem(TempData):
         # For each node:
         self.regen_nodes = []
         for node, data in self.operator_data.items():
-            if data["basis"] != "oscillator":
-                continue
-            
-            # Check if those parameters are oscillator impedance parameters
-            if not data["impedance"].free_symbols.isdisjoint(sweep_syms):
+            # Check if the operators depend on the swept parameters
+            if data.dependsOnSymbols(sweep_syms):
                 self.regen_nodes.append(node)
     
     def _perform_sweep_point_substitutions(self, sweep_config: SweepConfig):
@@ -790,81 +744,6 @@ class NumericalSystem(TempData):
             obj[i, 0] = op
         return obj
     
-    # Operator generators
-    def _get_oscillator_basis(self, node):
-        trunc = self.operator_data[node]["truncation"]
-        
-        # Get the impedance of the mode
-        i = self.getNodeIndex(node)
-        osc_impedance = self.getParameterValue("Zosc%i" % node)*self.units.getPrefactor("Impe")
-        
-        # Get the prefactor that results from transformation (the charge increment prefactor)
-        a = self.SS.cooper_disp[node]
-
-        # Using oscillator basis
-        Q = 1j*np.sqrt(1/(2*osc_impedance))*(qt.create(trunc) - qt.destroy(trunc))*self.units.getPrefactor("ChgOsc")
-        P = np.sqrt(osc_impedance/2)*(qt.create(trunc) + qt.destroy(trunc))*self.units.getPrefactor("FlxOsc")
-        Pp = a*2*np.pi/pc.phi0*np.sqrt(pc.hbar)*P/self.units.getPrefactor("FlxOsc")
-
-        # Generate Josephson displacement operators by first diagonalising the flux operator
-        E, V = np.linalg.eigh(Pp.data.to_array())
-
-        # Create transformation matrices
-        U = qt.Qobj(V)
-        Uinv = qt.Qobj(np.linalg.inv(V))
-
-        # Exponentiate the diagonal matrix
-        D = U*qt.Qobj(np.diag(np.exp(1j*E)))*Uinv
-        Ddag = D.dag()
-        return (
-            Q.to("CSR").tidyup(_qobj_atol),
-            P.to("CSR").tidyup(_qobj_atol),
-            D.to("CSR").tidyup(_qobj_atol),
-            Ddag.to("CSR").tidyup(_qobj_atol)
-        )
-    
-    def _get_charge_basis(self, node):
-        trunc = self.operator_data[node]["truncation"]
-        
-        # For IJ modes the charge states are the eigenvectors of the following matrix
-        _, s = (-qt.num(2*trunc + 1, trunc)).eigenstates()
-        
-        # Construct the flux states
-        phik_list = []
-        phik = None
-        qm = [float(i)-trunc for i in range(2*trunc + 1)]
-        for k in qm:
-            phik = qt.basis(2*trunc + 1, 0) * 0
-            for j, qi in enumerate(qm):
-                phik += np.sqrt(1/(2*trunc + 1)) * np.exp(2j*np.pi*k*qi/(2*trunc + 1))*s[j]
-            phik_list.append(phik)
-        
-        # From this build the flux operator
-        phik_eigvals = [(float(i)-trunc)/(2*trunc + 1) for i in range(2*trunc + 1)]
-        P = qt.qeye(2*trunc + 1) - qt.qeye(2*trunc + 1)
-        for i, phik in enumerate(phik_list):
-            P += phik_eigvals[i]*phik*phik.dag()
-        
-        # Get a simple charge number operator
-        Q = -qt.num(2*trunc + 1)+float(trunc)
-        
-        # Generate Josephson displacement operators by first diagonalising the flux operator
-        E, V = np.linalg.eigh(P.data.to_array())
-        
-        # Create transformation matrices
-        U = qt.Qobj(V)
-        Uinv = qt.Qobj(np.linalg.inv(V))
-        
-        # Exponentiate the diagonal matrix
-        D = U*qt.Qobj(np.diag(np.exp(-2j*np.pi*E)))*Uinv - qt.basis(2*trunc+1, 2*trunc)*qt.basis(2*trunc+1, 0).dag()
-        Ddag = D.dag()
-        return (
-            Q.to("CSR").tidyup(_qobj_atol),
-            P.to("CSR").tidyup(_qobj_atol),
-            D.to("CSR").tidyup(_qobj_atol),
-            Ddag.to("CSR").tidyup(_qobj_atol)
-        )
-
     # FIXME: This causes issues when regenerating code
     def _set_parameter_units(self):
         
