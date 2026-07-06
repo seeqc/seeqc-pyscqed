@@ -136,14 +136,6 @@ class NumericalSystem(TempData):
             # Get the correct commutator
             return qt.commutator(P, Q)*corrmat
     
-    ## Available basis representations
-    __basis_repr = [
-        "charge", 
-        "flux", 
-        "oscillator", 
-        "custom"
-    ]
-    
     def configureOperator(self, node, trunc, basis, fmax=4.0):
         if node not in self.getNodeList():
             raise Exception("Node '%i' is not a valid circuit node." % node)
