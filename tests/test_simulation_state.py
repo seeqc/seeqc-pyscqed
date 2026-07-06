@@ -204,3 +204,33 @@ def test_numerical_system_substitute_populates_numerical_parts():
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
     hamil.substitute()
     assert isinstance(hamil._numerical_parts, _NumericalParts)
+
+
+def test_sweep_does_not_regenerate_charge_basis_operators():
+    hamil = NumericalSystem(get_symbolic_system())
+    hamil.configureOperator(1, 40, "charge")
+    hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
+    old_charge = hamil.circ_operators[1]["charge"]
+
+    sweep = hamil.newSweepConfig()
+    sweep.add("C", np.linspace(20.0, 40.0, 2))
+    hamil.runSweep(sweep)
+
+    # Charge basis operators do not depend on the swept parameter, so no
+    # regeneration is scheduled and the operators are untouched
+    assert hamil.circ_operators[1]["charge"] is old_charge
+
+
+def test_sweep_regenerates_oscillator_basis_operators():
+    hamil = NumericalSystem(get_symbolic_system())
+    hamil.configureOperator(1, 40, "oscillator")
+    hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
+    old_charge = hamil.circ_operators[1]["charge"]
+
+    sweep = hamil.newSweepConfig()
+    sweep.add("C", np.linspace(20.0, 40.0, 2))
+    hamil.runSweep(sweep)
+
+    # The oscillator impedance depends on the swept parameter, so regeneration
+    # is scheduled and the operator vectors must track the new operators
+    assert hamil.circ_operators[1]["charge"] is not old_charge
