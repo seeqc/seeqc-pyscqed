@@ -25,6 +25,24 @@ def get_numerical_system(graph: CircuitGraph) -> NumericalSystem:
     return hamil
 
 
+def get_flux_qubit(operator_basis: str) -> NumericalSystem:
+    Ca = 60.0  # fF/um^2
+    Jc = 3.0  # uA/um^2
+    Aj = 0.6  # um^2
+    graph = get_single_node_graph()
+    graph.addFluxBias("I", "Z")
+    circuit = SymbolicSystem(graph)
+    hamil = NumericalSystem(circuit)
+    hamil.configureOperator(1, 100, operator_basis)
+    hamil.setParameterValues(
+        "L", 570.0,
+        "I", Jc*Aj,
+        "C", Ca*Aj,
+        "phiZ", 0.5
+    )
+    return hamil
+
+
 def test_sweep_one_dimension():
     hamil = get_numerical_system(get_single_node_graph())
     hamil.setParameterValues(
@@ -282,3 +300,19 @@ def test_get_numerical_output_eigenvalues_with_vectors():
     vectors = sweep.getNumericalOutput("C", eval_output=("Spectrum", "vectors"))
     assert isinstance(vectors, np.ndarray)
     assert vectors.shape == (3, 5)
+
+
+def test_spectrum_flux_dependence_independent_of_operator_basis():
+    hamil = get_flux_qubit("charge")
+    sweep_config = hamil.newSweepConfig()
+    sweep_config.add('phiZ', np.linspace(-1.0, 1.0, 11))
+    sweep = hamil.runSweep(sweep_config)
+    E1 = sweep.getNumericalOutput('phiZ')
+    
+    hamil = get_flux_qubit("oscillator")
+    sweep_config = hamil.newSweepConfig()
+    sweep_config.add('phiZ', np.linspace(-1.0, 1.0, 11))
+    sweep = hamil.runSweep(sweep_config)
+    E2 = sweep.getNumericalOutput('phiZ')
+
+    assert np.allclose(E1, E2, atol=1e-5, rtol=0)
