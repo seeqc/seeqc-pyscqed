@@ -346,3 +346,43 @@ def test_spectrum_circuit_element_dependence_independent_of_operator_basis():
     E2 = sweep.getNumericalOutput('L')
 
     assert np.allclose(E1.T - E1.T[0], E2.T - E2.T[0], atol=1e-5, rtol=0)
+
+
+def test_oscillator_parameters_are_consistent_independent_of_operator_basis():
+    charge_hamil = get_resonator("charge")
+
+    # Verify the oscillator parameters match
+    H = charge_hamil.units.getUnitPrefactor("H")
+    F = charge_hamil.units.getUnitPrefactor("F")
+    L = charge_hamil.getParameterValue("L") * H
+    C = charge_hamil.getParameterValue("C") * F
+
+    Hosc = charge_hamil.getHamiltonian()
+    result, _ = charge_hamil.diagonalize(Hosc)
+    f_diag = (result.data[1] - result.data[0]) * 1e9
+
+    f = 1 / np.sqrt(L * C) / 2 / np.pi
+    assert np.isclose(f_diag, f, atol=2e1, rtol=0)
+
+    osc_hamil = get_resonator("oscillator")
+
+    H = osc_hamil.units.getUnitPrefactor("H")
+    F = osc_hamil.units.getUnitPrefactor("F")
+    L = osc_hamil.getParameterValue("L") * H
+    C = osc_hamil.getParameterValue("C") * F
+
+    Hosc = osc_hamil.getHamiltonian()
+    result, _ = osc_hamil.diagonalize(Hosc)
+    f_diag = (result.data[1] - result.data[0]) * 1e9
+
+    f = 1 / np.sqrt(L * C) / 2 / np.pi
+    assert np.isclose(f_diag, f, atol=2e1, rtol=0)
+    Z = np.sqrt(L / C)
+
+    Zpref = np.sqrt(H / F)
+    fpref = np.sqrt(1 / H / F)
+    Zder = osc_hamil.getParameterValue("Zosc1") * Zpref
+    fder = osc_hamil.getParameterValue("fosc1") * fpref / 2 / np.pi
+
+    assert np.isclose(Zder, Z, atol=1e-5, rtol=0)
+    assert np.isclose(fder, f, atol=2e1, rtol=0)
