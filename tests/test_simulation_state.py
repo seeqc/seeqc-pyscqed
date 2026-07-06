@@ -149,10 +149,6 @@ def test_numerical_parts_from_symbolic_parts():
         np.asarray(parts.charge_bias_vector.subs(subs), dtype=np.float64)
     )
     assert np.allclose(
-        numeric.branch_charge_bias_vector,
-        np.asarray(parts.branch_charge_bias_vector.subs(subs), dtype=np.float64)
-    )
-    assert np.allclose(
         numeric.branch_flux_bias_matrix,
         np.asarray(parts.branch_flux_bias_matrix.subs(subs), dtype=np.float64)
     )
@@ -166,11 +162,6 @@ def test_numerical_parts_from_symbolic_parts():
         numeric.positive_flux_bias_exponentials, np.exp(2j*np.pi*flux_diag))
     assert np.allclose(
         numeric.negative_flux_bias_exponentials, np.exp(-2j*np.pi*flux_diag))
-    charges = numeric.branch_charge_bias_vector[:, 0]
-    assert np.allclose(
-        numeric.positive_charge_bias_exponentials, np.exp(2j*np.pi*charges))
-    assert np.allclose(
-        numeric.negative_charge_bias_exponentials, np.exp(-2j*np.pi*charges))
 
 
 def test_numerical_parts_from_mixed_parts_matches_full_substitution():
@@ -185,8 +176,7 @@ def test_numerical_parts_from_mixed_parts_matches_full_substitution():
     assert np.allclose(
         numeric.inverse_capacitance_matrix, full.inverse_capacitance_matrix)
     assert np.allclose(numeric.josephson_vector, full.josephson_vector)
-    assert np.allclose(
-        numeric.branch_charge_bias_vector, full.branch_charge_bias_vector)
+    assert np.allclose(numeric.charge_bias_vector, full.charge_bias_vector)
 
 
 def test_numerical_parts_rejects_invalid_source():

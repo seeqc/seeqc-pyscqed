@@ -136,14 +136,15 @@ class NumericalSystem(TempData):
             # Get the correct commutator
             return qt.commutator(P, Q)*corrmat
     
-    def configureOperator(self, node, trunc, basis, fmax=4.0):
+    def configureOperator(self, node, trunc, basis):
         if node not in self.getNodeList():
             raise Exception("Node '%i' is not a valid circuit node." % node)
-        
+        if basis not in ("charge", "oscillator"):
+            raise Exception("Unrecognized basis representation '%s'." % repr(basis))
+
         # Get the operator circuit-dependent parameters
         impedance = None
         frequency = None
-        flux_max = None
         if basis == "oscillator":
             index = self.getNodeIndex(node)
             Linv = self._symbolic_parts.inverse_inductance_matrix
@@ -156,36 +157,22 @@ class NumericalSystem(TempData):
             impe = "Zosc%i" % node
             self.SS.addParameter(impe)
             self.SS.addParameterisation(impe, impedance)
-        elif basis == "discretized_flux":
-            flux_max = fmax
-        
+
         self.operator_data[node] = {
-            "truncation": trunc, 
-            "basis": basis, 
-            "impedance": impedance, 
-            "frequency": frequency,
-            "flux_max": flux_max
+            "truncation": trunc,
+            "basis": basis,
+            "impedance": impedance,
+            "frequency": frequency
         }
-    
+
     def getOperatorList(self, node):
-        Q = None
-        P = None
-        D = None
-        Ddag = None
-        S = None
-        Sdag = None
         basis = self.operator_data[node]["basis"]
         # FIXME: Determine if we need to generate all the operators for this node
-        
+
         if basis == "charge":
             return self._get_charge_basis(node)
         elif basis == "oscillator":
             return self._get_oscillator_basis(node)
-        elif basis == "flux":
-            return self._get_flux_basis(node)
-        elif basis == "discretized_flux":
-            # FIXME: This doesn't work properly yet
-            return self._get_discretized_flux_basis(node)
         else:
             raise Exception("Unrecognized basis representation '%s'." % repr(basis))
     
@@ -221,7 +208,7 @@ class NumericalSystem(TempData):
             op_dict = {}
             trunc = self.operator_data[node]["truncation"]
             basis = self.operator_data[node]["basis"]
-            Q, P, D, Ddag, S, Sdag = self.getOperatorList(node)
+            Q, P, D, Ddag = self.getOperatorList(node)
             
             # Indices minus the current index
             indices = list(range(len(node_list)))
@@ -247,17 +234,7 @@ class NumericalSystem(TempData):
             for j in indices:
                 Olist[j] = Ilist[j]
             op_dict["disp_adj"] = qt.tensor(Olist)
-            
-            Olist[i] = S
-            for j in indices:
-                Olist[j] = Ilist[j]
-            op_dict["pdisp"] = qt.tensor(Olist)
-            
-            Olist[i] = Sdag
-            for j in indices:
-                Olist[j] = Ilist[j]
-            op_dict["pdisp_adj"] = qt.tensor(Olist)
-            
+
             self.circ_operators[node] = op_dict.copy()
     
     ###################################################################################################################
@@ -432,45 +409,9 @@ class NumericalSystem(TempData):
         
             Hj += -0.5*parts.josephson_vector[i]*(prod1 + prod2)
         Hj *= self.units.getPrefactor("Ej")
-        
-        # Get the Phaseslip energy
-        Hp = 0
-        for i, edge in enumerate(self.SS.edges):
-            if parts.phase_slip_vector[i] == 0.0:
-                continue
 
-            prod1 = parts.positive_charge_bias_exponentials[i]
-            prod2 = parts.negative_charge_bias_exponentials[i]
-            if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
-                # Left
-                for arg in Pp[i].args:
-                    node = self.SS.node_map_rev[arg.args[1]]
-                    if arg.args[0] > 0:
-                        prod1 *= self.circ_operators[node]["pdisp"]
-                    else:
-                        prod1 *= self.circ_operators[node]["pdisp_adj"]
-                
-                # Right
-                for arg in Pp[i].args:
-                    node = self.SS.node_map_rev[arg.args[1]]
-                    if arg.args[0] < 0:
-                        prod2 *= self.circ_operators[node]["pdisp"]
-                    else:
-                        prod2 *= self.circ_operators[node]["pdisp_adj"]
-            else:
-                node = self.SS.node_map_rev[Pp[i].args[1]]
-                if Pp[i].args[0] > 0:
-                    prod1 *= self.circ_operators[node]["pdisp"]
-                    prod2 *= self.circ_operators[node]["pdisp_adj"]
-                else:
-                    prod1 *= self.circ_operators[node]["pdisp_adj"]
-                    prod2 *= self.circ_operators[node]["pdisp"]
-        
-            Hp += -0.5*parts.phase_slip_vector[i]*(prod1 + prod2)
-        Hp *= self.units.getPrefactor("Ep")
-        
         # Total Hamiltonian
-        return (Hq + Hf + Hj + Hp).tidyup(_qobj_atol)
+        return (Hq + Hf + Hj).tidyup(_qobj_atol)
     
     def getCurrentOperator(self, edge=None) -> qt.Qobj:
         parts = self._numerical_parts
@@ -857,51 +798,36 @@ class NumericalSystem(TempData):
         i = self.getNodeIndex(node)
         osc_impedance = self.getParameterValue("Zosc%i" % node)*self.units.getPrefactor("Impe")
         
-        # Get the prefactors that results from transformation (the charge and fluxon increment prefactors)
+        # Get the prefactor that results from transformation (the charge increment prefactor)
         a = self.SS.cooper_disp[node]
-        b = self.SS.fluxon_disp[node]
-        
+
         # Using oscillator basis
         Q = 1j*np.sqrt(1/(2*osc_impedance))*(qt.create(trunc) - qt.destroy(trunc))*self.units.getPrefactor("ChgOsc")
         P = np.sqrt(osc_impedance/2)*(qt.create(trunc) + qt.destroy(trunc))*self.units.getPrefactor("FlxOsc")
         Pp = a*2*np.pi/pc.phi0*np.sqrt(pc.hbar)*P/self.units.getPrefactor("FlxOsc")
-        Qp = b*np.pi/pc.e*np.sqrt(pc.hbar)*Q/self.units.getPrefactor("ChgOsc")
-        
+
         # Generate Josephson displacement operators by first diagonalising the flux operator
         E, V = np.linalg.eigh(Pp.data.to_array())
-        
+
         # Create transformation matrices
         U = qt.Qobj(V)
         Uinv = qt.Qobj(np.linalg.inv(V))
-        
+
         # Exponentiate the diagonal matrix
         D = U*qt.Qobj(np.diag(np.exp(1j*E)))*Uinv
         Ddag = D.dag()
-        
-        # Generate Phase Slip displacement operators by first diagonalising the charge operator
-        E, V = np.linalg.eigh(Qp.data.to_array())
-        
-        # Create transformation matrices
-        U = qt.Qobj(V)
-        Uinv = qt.Qobj(np.linalg.inv(V))
-        
-        # Exponentiate the diagonal matrix
-        S = U*qt.Qobj(np.diag(np.exp(1j*E)))*Uinv
-        Sdag = S.dag()
         return (
             Q.to("CSR").tidyup(_qobj_atol),
             P.to("CSR").tidyup(_qobj_atol),
             D.to("CSR").tidyup(_qobj_atol),
-            Ddag.to("CSR").tidyup(_qobj_atol),
-            S.to("CSR").tidyup(_qobj_atol),
-            Sdag.to("CSR").tidyup(_qobj_atol)
+            Ddag.to("CSR").tidyup(_qobj_atol)
         )
     
     def _get_charge_basis(self, node):
         trunc = self.operator_data[node]["truncation"]
         
         # For IJ modes the charge states are the eigenvectors of the following matrix
-        q, s = (-qt.num(2*trunc + 1, trunc)).eigenstates()
+        _, s = (-qt.num(2*trunc + 1, trunc)).eigenstates()
         
         # Construct the flux states
         phik_list = []
@@ -932,130 +858,13 @@ class NumericalSystem(TempData):
         # Exponentiate the diagonal matrix
         D = U*qt.Qobj(np.diag(np.exp(-2j*np.pi*E)))*Uinv - qt.basis(2*trunc+1, 2*trunc)*qt.basis(2*trunc+1, 0).dag()
         Ddag = D.dag()
-        
-        # Generate Phase Slip displacement operators by just exponentiating the charge operator, which is diagonal already in this case
-        S = qt.Qobj(np.diag(np.exp(-2j*np.pi*q)))
-        Sdag = S.dag()
         return (
             Q.to("CSR").tidyup(_qobj_atol),
             P.to("CSR").tidyup(_qobj_atol),
             D.to("CSR").tidyup(_qobj_atol),
-            Ddag.to("CSR").tidyup(_qobj_atol),
-            S.to("CSR").tidyup(_qobj_atol),
-            Sdag.to("CSR").tidyup(_qobj_atol)
+            Ddag.to("CSR").tidyup(_qobj_atol)
         )
-    
-    def _get_flux_basis(self, node):
-        trunc = self.operator_data[node]["truncation"]
-        
-        # Flux operator counts the fluxon occupation
-        P = -qt.num(2*trunc + 1)+float(trunc)
-        q, s = P.eigenstates()
-        
-        # Construct the flux states
-        phik_list = []
-        phik = None
-        qm = [float(i)-trunc for i in range(2*trunc + 1)]
-        for k in qm:
-            phik = qt.basis(2*trunc + 1, 0) * 0
-            for j, qi in enumerate(qm):
-                phik += np.sqrt(1/(2*trunc + 1)) * np.exp(2j*np.pi*k*qi/(2*trunc + 1))*s[j]
-            phik_list.append(phik)
 
-        # From this build the flux operator
-        phik_eigvals = [(float(i)-trunc)/(2*trunc + 1) for i in range(2*trunc + 1)]
-        Q = qt.qeye(2*trunc + 1) - qt.qeye(2*trunc + 1)
-        for i, phik in enumerate(phik_list):
-            Q += phik_eigvals[i]*phik*phik.dag()
-        
-        # Generate Josephson displacement operators by first diagonalising the flux operator
-        E, V = np.linalg.eigh(P.data.to_array())
-        
-        # Create transformation matrices
-        U = qt.Qobj(V)
-        Uinv = qt.Qobj(np.linalg.inv(V))
-        
-        # Exponentiate the diagonal matrix
-        D = U*qt.Qobj(np.diag(np.exp(-2j*np.pi*E)))*Uinv - qt.basis(2*trunc+1, 2*trunc)*qt.basis(2*trunc+1, 0).dag()
-        Ddag = D.dag()
-        
-        # Generate Phase displacement operators by first diagonalising the charge operator
-        E, V = np.linalg.eigh(Q.data.to_array())
-        
-        # Create transformation matrices
-        U = qt.Qobj(V)
-        Uinv = qt.Qobj(np.linalg.inv(V))
-        
-        # Exponentiate the diagonal matrix
-        S = U*qt.Qobj(np.diag(np.exp(-2j*np.pi*E)))*Uinv - qt.basis(2*trunc+1, 2*trunc)*qt.basis(2*trunc+1, 0).dag()
-        Sdag = S.dag()
-        return (
-            Q.to("CSR").tidyup(_qobj_atol),
-            P.to("CSR").tidyup(_qobj_atol),
-            D.to("CSR").tidyup(_qobj_atol),
-            Ddag.to("CSR").tidyup(_qobj_atol),
-            S.to("CSR").tidyup(_qobj_atol),
-            Sdag.to("CSR").tidyup(_qobj_atol)
-        )
-    
-    def _get_discretized_flux_basis(self, node):
-        trunc = self.operator_data[node]["truncation"]
-        pmax = self.operator_data[node]["flux_max"]
-        
-        # Flux operator counts the fluxon occupation
-        grid = np.linspace(-pmax, pmax, 2*trunc+1)
-        P = qt.Qobj(np.diag(grid))
-        
-        q, s = P.eigenstates()
-        
-        # Construct the flux states
-        phik_list = []
-        phik = None
-        qm = [float(i)-trunc for i in range(2*trunc + 1)]
-        for k in qm:
-            phik = qt.basis(2*trunc + 1, 0) * 0
-            for j, qi in enumerate(qm):
-                phik += np.sqrt(1/(2*trunc + 1)) * np.exp(2j*np.pi*k*qi/(2*trunc + 1))*s[j]
-            phik_list.append(phik)
-
-        # From this build the flux operator
-        phik_eigvals = [(float(i)-trunc)/(2*trunc + 1) for i in range(2*trunc + 1)]
-        Q = qt.qeye(2*trunc + 1) - qt.qeye(2*trunc + 1)
-        for i, phik in enumerate(phik_list):
-            Q += phik_eigvals[i]*phik*phik.dag()
-        
-        Q = Q/(grid[1]-grid[0])
-        
-        # Generate Josephson displacement operators by first diagonalising the flux operator
-        E, V = np.linalg.eigh(P.data.to_array())
-        
-        # Create transformation matrices
-        U = qt.Qobj(V)
-        Uinv = qt.Qobj(np.linalg.inv(V))
-        
-        # Exponentiate the diagonal matrix
-        D = U*qt.Qobj(np.diag(np.exp(-2j*np.pi*E)))*Uinv - qt.basis(2*trunc+1, 2*trunc)*qt.basis(2*trunc+1, 0).dag()
-        Ddag = D.dag()
-        
-        # Generate Phase displacement operators by first diagonalising the charge operator
-        E, V = np.linalg.eigh(Q.data.to_array())
-        
-        # Create transformation matrices
-        U = qt.Qobj(V)
-        Uinv = qt.Qobj(np.linalg.inv(V))
-        
-        # Exponentiate the diagonal matrix
-        S = U*qt.Qobj(np.diag(np.exp(-2j*np.pi*E)))*Uinv - qt.basis(2*trunc+1, 2*trunc)*qt.basis(2*trunc+1, 0).dag()
-        Sdag = S.dag()
-        return (
-            Q.to("CSR").tidyup(_qobj_atol),
-            P.to("CSR").tidyup(_qobj_atol),
-            D.to("CSR").tidyup(_qobj_atol),
-            Ddag.to("CSR").tidyup(_qobj_atol),
-            S.to("CSR").tidyup(_qobj_atol),
-            Sdag.to("CSR").tidyup(_qobj_atol)
-        )
-    
     # FIXME: This causes issues when regenerating code
     def _set_parameter_units(self):
         

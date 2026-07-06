@@ -92,7 +92,6 @@ class _NumericalParts:
         self.josephson_vector = to_array(parts.josephson_vector)[:, 0]
         self.phase_slip_vector = to_array(parts.phase_slip_vector)[:, 0]
         self.charge_bias_vector = to_array(parts.charge_bias_vector) # x 2e
-        self.branch_charge_bias_vector = to_array(parts.branch_charge_bias_vector) # x 2e
         self.branch_flux_bias_matrix = to_array(parts.branch_flux_bias_matrix)
         self.inductive_flux_bias_vector = to_array(parts.inductive_flux_bias_vector)
 
@@ -100,8 +99,3 @@ class _NumericalParts:
         flux_biases = np.diag(self.branch_flux_bias_matrix)
         self.positive_flux_bias_exponentials = list(np.exp(2j*np.pi*flux_biases))
         self.negative_flux_bias_exponentials = list(np.exp(-2j*np.pi*flux_biases))
-
-        # Exponentiated charge biases
-        charge_biases = self.branch_charge_bias_vector[:, 0]
-        self.positive_charge_bias_exponentials = list(np.exp(2j*np.pi*charge_biases))
-        self.negative_charge_bias_exponentials = list(np.exp(-2j*np.pi*charge_biases))
