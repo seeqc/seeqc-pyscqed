@@ -43,6 +43,20 @@ def get_flux_qubit(operator_basis: str) -> NumericalSystem:
     return hamil
 
 
+def get_resonator(operator_basis: str) -> NumericalSystem:
+    graph = CircuitGraph()
+    graph.addBranch(0, 1, "C")
+    graph.addBranch(0, 1, "L")
+    circuit = SymbolicSystem(graph)
+    hamil = NumericalSystem(circuit)
+    hamil.configureOperator(1, 100, operator_basis)
+    hamil.setParameterValues(
+        "L", 500.0,
+        "C", 150.0
+    )
+    return hamil
+
+
 def test_sweep_one_dimension():
     hamil = get_numerical_system(get_single_node_graph())
     hamil.setParameterValues(
@@ -316,3 +330,19 @@ def test_spectrum_flux_dependence_independent_of_operator_basis():
     E2 = sweep.getNumericalOutput('phiZ')
 
     assert np.allclose(E1, E2, atol=1e-5, rtol=0)
+
+
+def test_spectrum_circuit_element_dependence_independent_of_operator_basis():
+    hamil = get_resonator("charge")
+    sweep_config = hamil.newSweepConfig()
+    sweep_config.add('L', np.linspace(400, 600, 3))
+    sweep = hamil.runSweep(sweep_config)
+    E1 = sweep.getNumericalOutput('L')
+
+    hamil = get_resonator("oscillator")
+    sweep_config = hamil.newSweepConfig()
+    sweep_config.add('L', np.linspace(400, 600, 3))
+    sweep = hamil.runSweep(sweep_config)
+    E2 = sweep.getNumericalOutput('L')
+
+    assert np.allclose(E1.T - E1.T[0], E2.T - E2.T[0], atol=1e-5, rtol=0)
