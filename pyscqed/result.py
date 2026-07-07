@@ -41,8 +41,8 @@ class EvaluationResult:
 
 @dataclass
 class SweepNumericalResult:
-    data: dict[EvalKeys, np.ndarray]
+    data: dict[tuple[str, str], np.ndarray]
     source: str
 
-    def __getitem__(self, subscript: EvalKeys) -> np.ndarray:
+    def __getitem__(self, subscript: tuple[str, str]) -> np.ndarray:
         return self.data[subscript]

@@ -1,3 +1,4 @@
+from typing import Any, Callable
 import qutip as qt
 import numpy as np
 import sympy as sy
@@ -7,6 +8,7 @@ import networkx as nx
 import progress.bar
 import time
 
+from .circuit_graph import CircuitGraph, CircuitGraphEdge
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
 from .operators import ChargeBasisOperators, OscillatorBasisOperators, _qobj_atol
@@ -20,7 +22,7 @@ from . import units
 
 
 class HamiltonianSpectrum(EvaluationGraph):
-    def __init__(self, nsys: "NumericalSystem"):
+    def __init__(self, nsys: "NumericalSystem") -> None:
         super().__init__()
         self.addNode("Hamiltonian", fn=nsys.getHamiltonian, outputs=["qobj"])
         self.addNode("Spectrum", fn=nsys.diagonalize, outputs=["E"])
@@ -28,7 +30,7 @@ class HamiltonianSpectrum(EvaluationGraph):
 
 
 class SingleResonatorInteraction(EvaluationGraph):
-    def __init__(self, nsys: "NumericalSystem"):
+    def __init__(self, nsys: "NumericalSystem") -> None:
         super().__init__()
         self.addNode("Hamiltonian", fn=nsys.getHamiltonian, outputs=["qobj"])
         self.addNode("Spectrum", fn=nsys.diagonalize, outputs=["energies", "vectors"])
@@ -48,7 +50,7 @@ class NumericalSystem(TempData):
     ]
     
     ## Initialise a Hamiltonian using a circuit specification
-    def __init__(self, symbolic_system: SymbolicSystem, unit=Units("CQED1")):
+    def __init__(self, symbolic_system: SymbolicSystem, unit: Units = Units("CQED1")) -> None:
         
         # Initialise the temporary data manager
         super().__init__()
@@ -68,25 +70,25 @@ class NumericalSystem(TempData):
         # Load default diagonaliser configuration
         self.setDiagConfig()
 
-    def getNodeList(self):
+    def getNodeList(self) -> list[int]:
         return self.SS.nodes
-    
-    def getNodeIndex(self, node):
+
+    def getNodeIndex(self, node: int) -> int:
         return self.SS.nodes.index(node)
-    
-    def getEdgeList(self):
+
+    def getEdgeList(self) -> list[CircuitGraphEdge]:
         return self.SS.edges
-    
-    def getEdgeIndex(self, edge):
+
+    def getEdgeIndex(self, edge: CircuitGraphEdge) -> int:
         return self.SS.edges.index(edge)
-    
-    def getCircuitGraph(self):
+
+    def getCircuitGraph(self) -> CircuitGraph:
         return self.SS.CG
-    
-    def getSymbolicSystem(self):
+
+    def getSymbolicSystem(self) -> SymbolicSystem:
         return self.SS
 
-    def getOperator(self, node, kind):
+    def getOperator(self, node: int, kind: str) -> qt.Qobj:
         """ Returns the operator ``kind`` of the given node, expanded into the circuit
         Hilbert space.
 
@@ -94,17 +96,17 @@ class NumericalSystem(TempData):
         """
         return self.state.getOperator(node, kind)
 
-    def getHilbertSpaceSize(self):
+    def getHilbertSpaceSize(self) -> int:
         """ Returns the Hilbert space size considering all currently defined operator
         truncations. """
         return self.state.getHilbertSpaceSize()
 
-    def sparsity(self, op):
+    def sparsity(self, op: qt.Qobj) -> float:
         """ Returns the sparsity of the given operator relative to the total Hilbert
         space size. """
         return self.state.sparsity(op)
-    
-    def configureOperator(self, node, trunc, basis):
+
+    def configureOperator(self, node: int, trunc: int, basis: str) -> None:
         if node not in self.getNodeList():
             raise Exception("Node '%i' is not a valid circuit node." % node)
         if basis == "charge":
@@ -116,19 +118,19 @@ class NumericalSystem(TempData):
         else:
             raise Exception("Unrecognized basis representation '%s'." % repr(basis))
 
-    def getClassicalPotentialFunction(self):
+    def getClassicalPotentialFunction(self) -> tuple[Callable[..., float], dict[str, float]]:
         """Returns a function that takes the flux circuit degrees of freedom and the flux bias terms as scalars and
         returns the potential energy at those coordinates. It can be used with numpy arrays too."""
         builder = ClassicalPotentialBuilder(self)
         return builder.getPotentialFunction(), builder.getDefaultInputs()
 
-    def substitute(self):
+    def substitute(self) -> None:
         """ Substitutes all current parameter values into the symbolic expressions, collecting
         the numerical arrays into a :class:`~pyscqed.simulation_state._NumericalParts`
         instance, and generates the expanded node operators. """
         self.state.substitute(self.SS.getSymbolValuesDict())
     
-    def getLinearPart(self):
+    def getLinearPart(self) -> sy.Expr:
         parts = self.state.numerical_parts
         Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
         P = self.state.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
@@ -143,7 +145,7 @@ class NumericalSystem(TempData):
 
         return Hq + Hf
     
-    def getStaticJosephsonPart(self):
+    def getStaticJosephsonPart(self) -> tuple[list[qt.Qobj], list[qt.Qobj]]:
         Jvec = self.state.numerical_parts.josephson_vector
 
         # Need the branch DoFs in the possibly transformed representation
@@ -249,7 +251,7 @@ class NumericalSystem(TempData):
         # Total Hamiltonian
         return (Hq + Hf + Hj).tidyup(_qobj_atol)
     
-    def getCurrentOperator(self, edge=None) -> qt.Qobj:
+    def getCurrentOperator(self, edge: CircuitGraphEdge | None = None) -> qt.Qobj:
         parts = self.state.numerical_parts
 
         # Check edge
@@ -313,7 +315,13 @@ class NumericalSystem(TempData):
         else:
             raise Exception("Edge %s is not current-carrying" % repr(edge))
     
-    def getCurrentMatrixElement(self, energies: EigenvalueResult, vectors: EigenvectorResult, edge=None, elements=None) -> float:
+    def getCurrentMatrixElement(
+        self,
+        energies: EigenvalueResult,
+        vectors: EigenvectorResult,
+        edge: CircuitGraphEdge | None = None,
+        elements: list[tuple[int, int]] | None = None
+    ) -> np.ndarray:
         # Get the relevant operator
         Iop = self.getCurrentOperator(edge=edge)
         
@@ -326,7 +334,7 @@ class NumericalSystem(TempData):
             result[i] = Iop.matrix_element(vectors.data[i1], vectors.data[i2]).real
         return result
     
-    def getVoltageOperator(self, node=None):
+    def getVoltageOperator(self, node: int | None = None) -> qt.Qobj:
         # Check node
         if node is None:
             raise Exception("No node specified for node voltage operator.")
@@ -342,7 +350,13 @@ class NumericalSystem(TempData):
         return self.units.getPrefactor("Vop") * Q[i, 0] * \
             parts.inverse_capacitance_matrix[i, i]
     
-    def getVoltageMatrixElement(self, energies: EigenvalueResult, vectors: EigenvectorResult, node=None, elements=None):
+    def getVoltageMatrixElement(
+        self,
+        energies: EigenvalueResult,
+        vectors: EigenvectorResult,
+        node: int | None = None,
+        elements: list[tuple[int, int]] | None = None
+    ) -> np.ndarray:
         # Get the relevant operator
         Vop = self.getVoltageOperator(node=node)
         
@@ -355,7 +369,7 @@ class NumericalSystem(TempData):
             result[i] = Vop.matrix_element(vectors.data[i1], vectors.data[i2]).real
         return result
     
-    def getChargingEnergies(self, node=None):
+    def getChargingEnergies(self, node: int | None = None) -> dict[int, float] | float:
         Cinv = self.state.numerical_parts.inverse_capacitance_matrix
         if node is None:
             ret = {}
@@ -366,7 +380,7 @@ class NumericalSystem(TempData):
             i = self.getNodeList().index(node)
             return 0.5 * Cinv[i, i] * self.units.getPrefactor("Ec")
     
-    def getFluxEnergies(self, node=None):
+    def getFluxEnergies(self, node: int | None = None) -> dict[int, float] | float:
         Linv = self.state.numerical_parts.inverse_inductance_matrix
         if node is None:
             ret = {}
@@ -377,7 +391,7 @@ class NumericalSystem(TempData):
             i = self.getNodeList().index(node)
             return 0.5 * Linv[i, i] * self.units.getPrefactor("El")
     
-    def getJosephsonEnergies(self, edge=None):
+    def getJosephsonEnergies(self, edge: CircuitGraphEdge | None = None) -> dict[CircuitGraphEdge, float] | float:
         Jvec = self.state.numerical_parts.josephson_vector
         if edge is None:
             ret = {}
@@ -388,7 +402,7 @@ class NumericalSystem(TempData):
             i = self.SS.edges.index(edge)
             return Jvec[i] * self.units.getPrefactor("Ej")
     
-    def getPhaseSlipEnergies(self, edge=None):
+    def getPhaseSlipEnergies(self, edge: CircuitGraphEdge | None = None) -> dict[CircuitGraphEdge, float] | float:
         Pvec = self.state.numerical_parts.phase_slip_vector
         if edge is None:
             ret = {}
@@ -403,9 +417,9 @@ class NumericalSystem(TempData):
         self,
         energies: EigenvalueResult,
         vectors: EigenvectorResult,
-        nmax=100,
-        cpl_node=None
-    ) -> np.array:
+        nmax: int = 100,
+        cpl_node: int | None = None
+    ) -> np.ndarray:
         # Save the derived parameter values for each sweep value
         if cpl_node is None:
             resonator_nodes = [node for node, value in self.SS.CG.resonators_cap.items() if value is not None]
@@ -464,11 +478,11 @@ class NumericalSystem(TempData):
     
     def setDiagConfig(
         self,
-        eigvalues=5,
-        get_vectors=False,
-        sparse=False,
-        sparsesolveropts={"sigma":None, "mode":"normal", "maxiter":None, "tol":1e-3, "which":"SA"}
-    ):
+        eigvalues: int = 5,
+        get_vectors: bool = False,
+        sparse: bool = False,
+        sparsesolveropts: dict[str, Any] = {"sigma":None, "mode":"normal", "maxiter":None, "tol":1e-3, "which":"SA"}
+    ) -> None:
         self.diagonalizer_config = {
             'kwargs':{
                 'eigvalues':eigvalues, 
@@ -484,7 +498,7 @@ class NumericalSystem(TempData):
         else:
             self.diagonalizer_config['func'] = util.diagDenseH
     
-    def getDiagConfig(self):
+    def getDiagConfig(self) -> dict[str, Any]:
         return self.diagonalizer_config
     
     def diagonalize(self, qobj: qt.Qobj) -> tuple[EigenvalueResult, EigenvectorResult | None]:
@@ -501,7 +515,7 @@ class NumericalSystem(TempData):
     ###################################################################################################################
     
     ## Set the value of a parameter.
-    def setParameterValue(self, name, value):
+    def setParameterValue(self, name: str, value: float) -> None:
         self.SS.setParameterValue(name, value)
         params = self.getParameterValuesDict()
         assert all(value is not None for value in params.values()), \
@@ -510,11 +524,11 @@ class NumericalSystem(TempData):
         self.substitute()
     
     ## Get the value of a parameter.
-    def getParameterValue(self, name):
+    def getParameterValue(self, name: str) -> float:
         return self.SS.getParameterValue(name)
     
     ## Set many parameter values.
-    def setParameterValues(self, *name_value_pairs):
+    def setParameterValues(self, *name_value_pairs: str | float | dict[str, float]) -> None:
         self.SS.setParameterValues(*name_value_pairs)
         params = self.getParameterValuesDict()
         assert all(value is not None for value in params.values()), "Not all parameters were set in this call. " \
@@ -522,20 +536,20 @@ class NumericalSystem(TempData):
         self.substitute()
     
     ## Get many parameter values.
-    def getParameterValues(self, *names):
+    def getParameterValues(self, *names: str) -> dict[str, float]:
         return self.SS.getParameterValues(*names)
-    
+
     ## Gets all parameters
-    def getParameterValuesDict(self):
+    def getParameterValuesDict(self) -> dict[str, float]:
         return self.SS.getParameterValuesDict()
-    
-    def getParameterSweep(self, name):
+
+    def getParameterSweep(self, name: str) -> np.ndarray:
         return self.SS.getParameterSweep(name)
-    
-    def getParameterNames(self):
+
+    def getParameterNames(self) -> list[str]:
         return self.SS.getParameterNamesList()
-    
-    def getPrefactor(self, name):
+
+    def getPrefactor(self, name: str) -> float:
         return self.units.getPrefactor(name)
     
     ###################################################################################################################
@@ -587,7 +601,7 @@ class NumericalSystem(TempData):
     #       Internal Functions
     ###################################################################################################################
     # FIXME: This causes issues when regenerating code
-    def _set_parameter_units(self):
+    def _set_parameter_units(self) -> None:
         
         # Get the unit prefactors
         Uf = self.units.getUnitPrefactor('Hz')
@@ -609,7 +623,7 @@ class NumericalSystem(TempData):
 class ClassicalPotentialBuilder:
     """Used internally to build a numerical classical potential energy getter as a function of all the parameters.
     """
-    def __init__(self, hamil):
+    def __init__(self, hamil: NumericalSystem) -> None:
         self._hamil = hamil
         self._dof_map = {}
         self._critical_currents = self._hamil.getPrefactor('Ej') * self._get_critical_currents()
@@ -624,19 +638,19 @@ class ClassicalPotentialBuilder:
         self.jj_func = syu.lambdify(list(self._dof_map.values()), self._dof_symbol_vector)
         self.ind_func = syu.lambdify(list(self._dof_map.values()), self._symbolic_inductive_energy)
 
-    def _get_critical_currents(self):
+    def _get_critical_currents(self) -> np.ndarray:
         subs = self._hamil.SS.getSymbolValuesDict()
         assert all(val is not None for val in subs.values()), "All parameters need to be initialized"
         Jvec = self._hamil.SS.getJosephsonVector().transpose().subs(subs)
         return np.array(Jvec).astype(np.float64)
 
-    def _get_symbolic_inductive_energy(self):
+    def _get_symbolic_inductive_energy(self) -> sy.Expr:
         P = self._hamil.SS.getFluxVector()
         Pe = self._hamil.SS.getFluxBiasVectorInd()
         expr = (P + Pe).transpose() * sy.Matrix(self._inverse_inductance_matrix) * (P + Pe)
         return expr[0, 0]
 
-    def _get_input_format(self):
+    def _get_input_format(self) -> None:
         # Get the DoF symbol-node map
         self._dof_map = {"phi%i" % n: sym[0] for n, sym in self._hamil.SS.node_dofs.items() if n > 0}
 
@@ -646,11 +660,11 @@ class ClassicalPotentialBuilder:
             name = self._hamil.SS.getParameterFromSymbol(sym)
             self._dof_map[name] = sym
 
-    def getDefaultInputs(self):
+    def getDefaultInputs(self) -> dict[str, float]:
         return {name: 0.0 for name in self._dof_map}
 
-    def getPotentialFunction(self):
-        def potential(inputs):
+    def getPotentialFunction(self) -> Callable[[dict[str, float | int | np.ndarray]], float | np.ndarray]:
+        def potential(inputs: dict[str, float | int | np.ndarray]) -> float | np.ndarray:
             # Check inputs
             assert isinstance(inputs, dict), "inputs should be a dict instance"
             for name in self._dof_map:
