@@ -59,7 +59,7 @@ class NumericalSystem(TempData):
         self.SS = symbolic_system
 
         # Manager for the derived circuit state
-        self.state = SimulationState(symbolic_system)
+        self.state = SimulationState(symbolic_system, unit)
 
         # Set the unit system
         self.units = unit
@@ -111,7 +111,7 @@ class NumericalSystem(TempData):
             self.state.circuit_operators.setNodeOperators(node, ChargeBasisOperators(node, trunc))
         elif basis == "oscillator":
             self.state.circuit_operators.setNodeOperators(
-                node, OscillatorBasisOperators(node, trunc, self.SS, self.units)
+                node, OscillatorBasisOperators(node, trunc)
             )
         else:
             raise Exception("Unrecognized basis representation '%s'." % repr(basis))

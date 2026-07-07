@@ -338,23 +338,22 @@ def test_circuit_operators_rejects_invalid_node_operators():
 
 def test_circuit_operators_regenerates_dependent_nodes():
     symbolic = get_symbolic_system()
+    units = Units("CQED1")
     circuit_ops = CircuitOperators(symbolic.nodes)
-    circuit_ops.setNodeOperators(
-        1, OscillatorBasisOperators(1, 10, symbolic, Units("CQED1"))
-    )
+    circuit_ops.setNodeOperators(1, OscillatorBasisOperators(1, 10))
     symbolic.setParameterValue("C", 20.0)
     symbolic.setParameterValue("I", 40e-3)
     symbolic.setParameterValue("L", 50.0)
-    circuit_ops.generateExpandedOperators()
+    circuit_ops.generateExpandedOperators(symbolic_system=symbolic, units=units)
     old_charge = circuit_ops[1]["charge"]
 
     # Symbols the operators do not depend on leave them untouched
-    circuit_ops.regenerateDependentOperators({symbolic.getSymbol("I")})
+    circuit_ops.regenerateDependentOperators({symbolic.getSymbol("I")}, symbolic, units)
     assert circuit_ops[1]["charge"] is old_charge
     assert circuit_ops.charge_op_vector[0, 0] is old_charge
 
     # Symbols the impedance depends on trigger regeneration
-    circuit_ops.regenerateDependentOperators({symbolic.getSymbol("C")})
+    circuit_ops.regenerateDependentOperators({symbolic.getSymbol("C")}, symbolic, units)
     assert circuit_ops[1]["charge"] is not old_charge
     assert circuit_ops.charge_op_vector[0, 0] is circuit_ops[1]["charge"]
 

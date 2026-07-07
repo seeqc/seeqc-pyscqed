@@ -64,27 +64,38 @@ def test_charge_basis_operators_generate():
 
 def test_oscillator_basis_operators_generate():
     symbolic = get_symbolic_system()
-    ops = OscillatorBasisOperators(1, 40, symbolic, Units("CQED1"))
+    ops = OscillatorBasisOperators(1, 40)
     assert isinstance(ops, NodeOperators)
     assert ops.dimension == 40
     assert ops.getIdentity().shape == (40, 40)
 
-    # Construction registers the oscillator parameterisations
-    assert "fosc1" in symbolic.getParameterNamesList()
-    assert "Zosc1" in symbolic.getParameterNamesList()
+    # Generation requires the symbolic system and units
+    with pytest.raises(ValueError):
+        ops.generate()
 
     symbolic.setParameterValue("C", 20.0)
     symbolic.setParameterValue("I", 40e-3)
     symbolic.setParameterValue("L", 50.0)
 
-    ops.generate()
+    ops.generate(symbolic, Units("CQED1"))
     for op in (ops.Q, ops.P, ops.D, ops.Ddag):
         assert op.shape == (40, 40)
+
+    # The first generation registers the oscillator parameterisations and
+    # makes their values immediately available
+    assert "fosc1" in symbolic.getParameterNamesList()
+    assert "Zosc1" in symbolic.getParameterNamesList()
+    assert symbolic.getParameterValue("Zosc1") is not None
 
 
 def test_oscillator_basis_operators_symbol_dependence():
     symbolic = get_initialized_symbolic_system()
-    ops = OscillatorBasisOperators(1, 40, symbolic, Units("CQED1"))
+    ops = OscillatorBasisOperators(1, 40)
+
+    # Dependencies are unknown until the operators are first generated
+    assert not ops.dependsOnSymbols({symbolic.getSymbol("C")})
+
+    ops.generate(symbolic, Units("CQED1"))
 
     # The impedance depends on the capacitance and inductance, not the junction
     assert ops.dependsOnSymbols({symbolic.getSymbol("C")})
@@ -169,11 +180,11 @@ def test_charge_basis_construction():
 def test_oscillator_basis_construction():
     trunc = 10
     symbolic = get_symbolic_system()
-    ops = OscillatorBasisOperators(1, trunc, symbolic, Units("CQED1"))
+    ops = OscillatorBasisOperators(1, trunc)
     symbolic.setParameterValue("C", 20.0)
     symbolic.setParameterValue("I", 40e-3)
     symbolic.setParameterValue("L", 50.0)
-    ops.generate()
+    ops.generate(symbolic, Units("CQED1"))
 
     # Charge and flux operators are Hermitian and couple only neighbouring Fock states
     assert ops.Q.isherm

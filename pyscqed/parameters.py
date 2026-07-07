@@ -387,7 +387,7 @@ class ParamCollection:
         
         # Update the value
         self.__collection[name].setValue(value)
-        self._update_parameterisations()
+        self.updateParameterisations()
     
     def getParameterValue(self, name):
         """ Get the value of a given parameter.
@@ -477,7 +477,7 @@ class ParamCollection:
                 print("Warning: Parameter %s is parameterised so it will not be set to the requested value." % name)
                 continue
             self.__collection[name].setValue(values[i])
-        self._update_parameterisations()
+        self.updateParameterisations()
     
     def getParameterValues(self, *names):
         r""" Get the values of many parameters as a dictionary.
@@ -1207,7 +1207,11 @@ class ParamCollection:
         self.__parameterisation = data[2]
         self.__parameterisation_graph = data[3]
     
-    def _update_parameterisations(self):
+    def updateParameterisations(self):
+        """ Recomputes the values of all parameterised parameters from the currently set
+        independent parameter values. Called automatically when parameter values are set;
+        call it directly after registering a new parameterisation to make its value
+        available immediately. """
         checked_nodes = set()
         checked_edges = set()
         G = self.__parameterisation_graph

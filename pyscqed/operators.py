@@ -3,8 +3,6 @@ import numpy as np
 import qutip as qt
 import sympy as sy
 
-from .symbolic_system import SymbolicSystem
-from .units import Units
 from . import physical_constants as pc
 
 # Local override for the Qobj tolerance. The global settings appear to not work
@@ -34,8 +32,12 @@ class NodeOperators:
         """ Returns the identity operator used to expand into the total Hilbert space. """
         return qt.qeye(self.dimension)
 
-    def generate(self):
-        """ Populates ``Q``, ``P``, ``D`` and ``Ddag`` from the current parameter values. """
+    def generate(self, symbolic_system=None, units=None):
+        """ Populates ``Q``, ``P``, ``D`` and ``Ddag`` from the current parameter values.
+
+        :param symbolic_system: required by bases whose operators depend on the circuit.
+        :param units: required by bases whose operators depend on the unit system.
+        """
         raise NotImplementedError
 
     def dependsOnSymbols(self, symbols):
@@ -51,7 +53,7 @@ class ChargeBasisOperators(NodeOperators):
     def dimension(self):
         return 2*self.truncation + 1
 
-    def generate(self):
+    def generate(self, symbolic_system=None, units=None):
         trunc = self.truncation
 
         # For IJ modes the charge states are the eigenvectors of the following matrix
@@ -96,52 +98,47 @@ class ChargeBasisOperators(NodeOperators):
 class OscillatorBasisOperators(NodeOperators):
     """Harmonic oscillator basis operators for a single circuit node degree of freedom.
 
-    Construction derives the symbolic oscillator ``frequency`` and ``impedance`` from the
-    circuit and registers the associated ``fosc<node>`` and ``Zosc<node>`` parameterisations
-    on the symbolic system.
+    The first generation derives the symbolic oscillator ``frequency`` and ``impedance``
+    from the circuit and registers the associated ``fosc<node>`` and ``Zosc<node>``
+    parameterisations on the symbolic system.
     """
 
-    def __init__(self, node, truncation, symbolic_system: SymbolicSystem, units: Units):
+    def __init__(self, node, truncation):
         super().__init__(node, truncation)
-        self._symbolic_system = symbolic_system
-        self._units = units
-
-        # Derive the oscillator parameters from the circuit
-        index = symbolic_system.nodes.index(node)
-        Linv = symbolic_system.getInverseInductanceMatrix()
-        Cinv = symbolic_system.getInverseCapacitanceMatrix()
-        self.frequency = sy.sqrt(Linv[index, index]*Cinv[index, index])
-        self.impedance = sy.sqrt(Cinv[index, index]/Linv[index, index])
-
-        # Register the oscillator parameterisations
-        freq = "fosc%i" % node
-        symbolic_system.addParameter(freq)
-        symbolic_system.addParameterisation(freq, self.frequency)
-        impe = "Zosc%i" % node
-        symbolic_system.addParameter(impe)
-        symbolic_system.addParameterisation(impe, self.impedance)
+        self.frequency = None
+        self.impedance = None
 
     @property
     def dimension(self):
         return self.truncation
 
     def dependsOnSymbols(self, symbols):
+        if self.impedance is None:
+            return False
         return not self.impedance.free_symbols.isdisjoint(symbols)
 
-    def generate(self):
+    def generate(self, symbolic_system=None, units=None):
+        if symbolic_system is None or units is None:
+            raise ValueError(
+                "The symbolic system and units are required to generate oscillator "
+                "basis operators."
+            )
+        if self.impedance is None:
+            self._derive_oscillator_parameters(symbolic_system)
+
         trunc = self.truncation
 
         # Get the impedance of the mode
-        osc_impedance = self._symbolic_system.getParameterValue("Zosc%i" % self.node) * \
-            self._units.getPrefactor("Impe")
+        osc_impedance = symbolic_system.getParameterValue("Zosc%i" % self.node) * \
+            units.getPrefactor("Impe")
 
         # Get the prefactor that results from transformation (the charge increment prefactor)
-        a = self._symbolic_system.cooper_disp[self.node]
+        a = symbolic_system.cooper_disp[self.node]
 
         # Using oscillator basis
-        Q = 1j*np.sqrt(1/(2*osc_impedance))*(qt.create(trunc) - qt.destroy(trunc))*self._units.getPrefactor("ChgOsc")
-        P = np.sqrt(osc_impedance/2)*(qt.create(trunc) + qt.destroy(trunc))*self._units.getPrefactor("FlxOsc")
-        Pp = a*2*np.pi/pc.phi0*np.sqrt(pc.hbar)*P/self._units.getPrefactor("FlxOsc")
+        Q = 1j*np.sqrt(1/(2*osc_impedance))*(qt.create(trunc) - qt.destroy(trunc))*units.getPrefactor("ChgOsc")
+        P = np.sqrt(osc_impedance/2)*(qt.create(trunc) + qt.destroy(trunc))*units.getPrefactor("FlxOsc")
+        Pp = a*2*np.pi/pc.phi0*np.sqrt(pc.hbar)*P/units.getPrefactor("FlxOsc")
 
         # Generate Josephson displacement operators by first diagonalising the flux operator
         E, V = np.linalg.eigh(Pp.data.to_array())
@@ -157,3 +154,20 @@ class OscillatorBasisOperators(NodeOperators):
         self.P = P.to("CSR").tidyup(_qobj_atol)
         self.D = D.to("CSR").tidyup(_qobj_atol)
         self.Ddag = D.dag().to("CSR").tidyup(_qobj_atol)
+
+    def _derive_oscillator_parameters(self, symbolic_system):
+        # Derive the oscillator parameters from the circuit
+        index = symbolic_system.nodes.index(self.node)
+        Linv = symbolic_system.getInverseInductanceMatrix()
+        Cinv = symbolic_system.getInverseCapacitanceMatrix()
+        self.frequency = sy.sqrt(Linv[index, index]*Cinv[index, index])
+        self.impedance = sy.sqrt(Cinv[index, index]/Linv[index, index])
+
+        # Register the oscillator parameterisations and update their values
+        freq = "fosc%i" % self.node
+        symbolic_system.addParameter(freq)
+        symbolic_system.addParameterisation(freq, self.frequency)
+        impe = "Zosc%i" % self.node
+        symbolic_system.addParameter(impe)
+        symbolic_system.addParameterisation(impe, self.impedance)
+        symbolic_system.updateParameterisations()

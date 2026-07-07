@@ -4,6 +4,7 @@ import qutip as qt
 
 from .operators import NodeOperators
 from .symbolic_system import SymbolicSystem
+from .units import Units
 from . import physical_constants as pc
 
 
@@ -147,9 +148,10 @@ class CircuitOperators:
             )
         self._operator_data[node] = node_operators
 
-    def generateExpandedOperators(self, nodes=None):
+    def generateExpandedOperators(self, nodes=None, symbolic_system=None, units=None):
         """ Generates the operators of each node (all if ``nodes`` is None) and expands them
-        into the total Hilbert space. """
+        into the total Hilbert space. The symbolic system and units are passed through to
+        the operator generators that require them. """
         # Generate the Hilbert space expanders
         Ilist = [self._operator_data[node].getIdentity() for node in self._node_list]
 
@@ -159,7 +161,7 @@ class CircuitOperators:
                 continue
 
             ops = self._operator_data[node]
-            ops.generate()
+            ops.generate(symbolic_system, units)
 
             Olist = list(Ilist)
             op_dict = {}
@@ -183,7 +185,7 @@ class CircuitOperators:
             vector[i, 0] = self._circ_operators[node][key]
         return vector
 
-    def regenerateDependentOperators(self, symbols):
+    def regenerateDependentOperators(self, symbols, symbolic_system=None, units=None):
         """ Regenerates the expanded operators of the nodes whose operators depend on any of
         the given symbols. """
         symbols = set(symbols)
@@ -192,7 +194,7 @@ class CircuitOperators:
             if ops.dependsOnSymbols(symbols)
         ]
         if nodes:
-            self.generateExpandedOperators(nodes)
+            self.generateExpandedOperators(nodes, symbolic_system, units)
 
 
 class SimulationState:
@@ -200,17 +202,19 @@ class SimulationState:
     expanded into the circuit Hilbert space, and the symbolic, partially substituted
     and fully numerical Hamiltonian parts.
 
+    :param units: the unit system passed to the node operator generators.
     :raises TypeError: if ``symbolic_system`` is not a
         :class:`~pyscqed.symbolic_system.SymbolicSystem` instance.
     """
 
-    def __init__(self, symbolic_system: SymbolicSystem):
+    def __init__(self, symbolic_system: SymbolicSystem, units=Units("CQED1")):
         if not isinstance(symbolic_system, SymbolicSystem):
             raise TypeError(
                 "symbolic_system must be a SymbolicSystem instance, got '%s'."
                 % type(symbolic_system).__name__
             )
         self._symbolic_system = symbolic_system
+        self._units = units
         self.circuit_operators = CircuitOperators(symbolic_system.nodes)
         self.symbolic_parts = _SymbolicParts(symbolic_system)
         self.mixed_parts: _MixedParts | None = None
@@ -262,7 +266,8 @@ class SimulationState:
         """ Substitutes all parameter values into the symbolic expressions, populating
         :attr:`numerical_parts`, and generates the expanded node operators. """
         self.numerical_parts = _NumericalParts(self.symbolic_parts, substitutions)
-        self.circuit_operators.generateExpandedOperators()
+        self.circuit_operators.generateExpandedOperators(
+            symbolic_system=self._symbolic_system, units=self._units)
 
     def substituteStatic(self, substitutions):
         """ Substitutes the static parameters of a sweep, leaving the swept symbols
@@ -274,4 +279,5 @@ class SimulationState:
         populating :attr:`numerical_parts` and regenerating the operators that depend
         on the swept symbols. """
         self.numerical_parts = _NumericalParts(self.mixed_parts, substitutions)
-        self.circuit_operators.regenerateDependentOperators(substitutions)
+        self.circuit_operators.regenerateDependentOperators(
+            substitutions, self._symbolic_system, self._units)
