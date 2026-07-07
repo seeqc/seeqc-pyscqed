@@ -38,7 +38,6 @@ class _SymbolicPartsBase:
 
         # Symbolic expressions independent of a coupled subsystem
         self.josephson_vector = self._prepare(symbolic_system.getJosephsonVector())
-        self.phase_slip_vector = self._prepare(symbolic_system.getPhaseSlipVector())
         self.charge_bias_vector = self._prepare(symbolic_system.getChargeBiasVector())
         self.branch_charge_bias_vector = symbolic_system.Rnb * self.charge_bias_vector
         self.branch_flux_bias_vector = self._prepare(
@@ -95,7 +94,6 @@ class _NumericalParts:
         self.branch_inverse_inductance_matrix = to_array(
             parts.branch_inverse_inductance_matrix)
         self.josephson_vector = to_array(parts.josephson_vector)[:, 0]
-        self.phase_slip_vector = to_array(parts.phase_slip_vector)[:, 0]
         self.charge_bias_vector = to_array(parts.charge_bias_vector) # x 2e
         self.branch_flux_bias_matrix = to_array(parts.branch_flux_bias_matrix)
         self.inductive_flux_bias_vector = to_array(parts.inductive_flux_bias_vector)

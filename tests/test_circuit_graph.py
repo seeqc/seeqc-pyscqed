@@ -12,10 +12,9 @@ def do_all_branch_type_tests_on_branch(testobj, G, edge, expected_type):
     fn = [
         G.isCapacitiveEdge,
         G.isInductiveEdge,
-        G.isJosephsonEdge,
-        G.isPhaseSlipEdge
+        G.isJosephsonEdge
     ]
-    for i in range(4):
+    for i in range(3):
         if i == G._element_prefixes.index(expected_type):
             testobj.assertTrue(fn[i](edge))
         else:
@@ -59,7 +58,7 @@ class CircuitGraphTest(unittest.TestCase):
 
     def test_graph_branch_rules(self):
         # Test that branch types can be correctly identified
-        for i in range(4):
+        for i in range(3):
             graph = CircuitGraph()
             graph.addBranch(0, 1, graph._element_prefixes[i])
             do_all_branch_type_tests_on_branch(self, graph, (0, 1, 0), graph._element_prefixes[i])

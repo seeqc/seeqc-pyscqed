@@ -1,7 +1,6 @@
 # PySCQED: Python Superconducting Circuit Quantum Electro-Dynamics Package
 
 Critical TODOs:
-- Remove unused and unfinished features (phase slip, flux discretization)
 - Implement the algorithm for block diagonalization (optimal basis representation for node degrees of freedom)
 - Implement system partitioning support
 

@@ -468,68 +468,7 @@ class SymbolicSystem(ParamCollection):
             ret += -0.5*Jvec[i]*(prod1 + prod2)
         
         return sy.Matrix([ret])
-    
-    #
-    # PHASESLIP NANOWIRES
-    #
-    def getPhaseSlipVector(self) -> sy.Matrix:
-        vec = list(np.zeros(self.Nb))
-        for i, edge in enumerate(self.edges):
-            cstr = self.CG.components_map[edge]
-            if cstr[0] == self.CG._element_prefixes[3]:
-                vec[i] = self.circuit_params[cstr]
-        return sy.Matrix(vec)
-    
-    def getPhaseSlipEnergies(self) -> None:
-        pass
-    
-    def getQuantumPhaseSlipEnergies(self) -> sy.Matrix:
-        # Get PhaseSlip energies
-        Pvec = self.getPhaseSlipVector()
-        
-        # Create the transformed branch vector
-        Pp = self.Rnb*self.Rinv*self.node_vector
-        
-        # Create the exponential bias terms in branch form
-        Qbias = self.Rnb*self.getChargeBiasVector(form="phase")
-        Qexp_p = sy.Matrix([sy.exp(1j*Qbias[i]) for i in range(self.Nb)])
-        Qexp_m = sy.Matrix([sy.exp(-1j*Qbias[i]) for i in range(self.Nb)])
-        
-        # Construct the cosine terms in terms of displacement operators
-        ret = 0
-        for i, edge in enumerate(self.edges):
-            if Pvec[i] == 0:
-                continue
-            
-            prod1 = Qexp_p[i]
-            prod2 = Qexp_m[i]
-            if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
-                
-                # Left
-                for arg in Pp[i].args:
-                    if arg.args[0] > 0:
-                        prod1 *= self.pdisp_vector[arg.args[1]]
-                    else:
-                        prod1 *= self.pdisp_adj_vector[arg.args[1]]
-                
-                # Right
-                for arg in Pp[i].args:
-                    if arg.args[0] < 0:
-                        prod2 *= self.pdisp_vector[arg.args[1]]
-                    else:
-                        prod2 *= self.pdisp_adj_vector[arg.args[1]]
-            else: # Case where there is a single element
-                if Pp[i].args[0] > 0:
-                    prod1 *= self.pdisp_vector[Pp[i].args[1]]
-                    prod2 *= self.pdisp_adj_vector[Pp[i].args[1]]
-                else:
-                    prod1 *= self.pdisp_adj_vector[Pp[i].args[1]]
-                    prod2 *= self.pdisp_vector[Pp[i].args[1]]
-        
-            ret += -0.5*Pvec[i]*(prod1 + prod2)
-        
-        return sy.Matrix([ret])
-    
+
     #
     # HAMILTONIAN
     #
@@ -554,8 +493,7 @@ class SymbolicSystem(ParamCollection):
     def getQuantumHamiltonian(self) -> sy.Matrix:
         return self.getChargingEnergies()\
         +self.getFluxEnergies()\
-        +self.getQuantumJosephsonEnergies()\
-        +self.getQuantumPhaseSlipEnergies()
+        +self.getQuantumJosephsonEnergies()
     
     #
     # INTERNAL
@@ -573,14 +511,12 @@ class SymbolicSystem(ParamCollection):
         self.classical_node_dofs = {}
         for node in self.CG.sc_spanning_tree_wc.nodes:
             self.node_dofs[node] = \
-                    sy.symbols("%s_{%i} %s_{%i} %s_{%i} %s_{%i} %s_{%i} %s_{%i}" % \
+                    sy.symbols("%s_{%i} %s_{%i} %s_{%i} %s_{%i}" % \
                     (
                         self.flux_prefix, node,
                         self.charge_prefix, node,
                         "D", node,
-                        "D^{\\dagger}", node,
-                        "S", node,
-                        "S^{\\dagger}", node
+                        "D^{\\dagger}", node
                     ), commutative=False)
             self.classical_node_dofs[node] = \
                     sy.symbols("%s_{%i} %s_{%i} %s_{%i}" % \
@@ -602,20 +538,7 @@ class SymbolicSystem(ParamCollection):
                 self.cooper_disp[node] = abs(float(Pp[i].args[0].args[0]))
             else: # Case where there is a single element
                 self.cooper_disp[node] = abs(float(Pp[i].args[0]))
-        
-        # Get Phase Slip displacement operator maps
-        self.pdisp_vector = {self.node_vector[i]: self.node_dofs[n][4] for i, n in enumerate(self.nodes)}
-        self.pdisp_adj_vector = {self.node_vector[i]: self.node_dofs[n][5] for i, n in enumerate(self.nodes)}
-        
-        # Get phase-slip displacement operator partial fluxons resulting from mode transformation
-        Qp = self.RinvT * self.getChargeVector()
-        self.fluxon_disp = {}
-        for i, node in enumerate(self.nodes):
-            if len(Qp[i].atoms()) > 2: # Case where there is sum of elements
-                self.fluxon_disp[node] = abs(float(Qp[i].args[0].args[0]))
-            else: # Case where there is a single element
-                self.fluxon_disp[node] = abs(float(Qp[i].args[0]))
-    
+
     # FIXME: Is this still required?
     def _add_branch_dofs(self) -> None:
         self.branch_dofs = {}

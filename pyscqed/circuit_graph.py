@@ -22,7 +22,6 @@ class CircuitGraph:
         "C", # Capacitor
         "L", # Inductor
         "I", # Josephson junction
-        "V", # Phase-slip nanowire
         "M"  # Mutual inductance
     ]
 
@@ -74,7 +73,7 @@ class CircuitGraph:
         """
 
         # Check there are no mutual inductors specified
-        if component[0] == self._element_prefixes[4]:
+        if component[0] == self._element_prefixes[3]:
             raise TypeError("Cannot add a mutual inductance to a circuit branch.")
 
         # Check the symbol is correct
@@ -92,7 +91,7 @@ class CircuitGraph:
     def coupleBranchesInductively(self, inductor1: str, inductor2: str, mutual_inductance: str) -> None:
         """ Couples two branches inductively.
         """
-        if mutual_inductance[0] != self._element_prefixes[4]:
+        if mutual_inductance[0] != self._element_prefixes[3]:
             raise TypeError("Branch coupling component must be a mutual inductance.")
         if mutual_inductance in self.coupled_branches:
             raise ValueError("Branch coupling component '%s' already in use." % mutual_inductance)
@@ -188,7 +187,7 @@ class CircuitGraph:
 
         if mutual_inductance is not None:
             # Ensure component is a mutual inductance
-            if mutual_inductance[0] != self._element_prefixes[4]:
+            if mutual_inductance[0] != self._element_prefixes[3]:
                 raise TypeError("Flux bias coupling component must be a mutual inductance.")
 
             # We can't load a JJ branch
@@ -276,14 +275,6 @@ class CircuitGraph:
             return True
         return False
 
-    def isPhaseSlipEdge(self, edge: CircuitGraphEdge) -> bool:
-        """ Checks a branch contains a phase-slip nano wire.
-        """
-        cstr = self.components_map[edge]
-        if cstr[0] == self._element_prefixes[3]:
-            return True
-        return False
-
     def getCapacitiveEdges(self) -> dict[str, CircuitGraphEdge]:
         """ Gets a mapping of all edges that contain a capacitor.
         """
@@ -311,16 +302,6 @@ class CircuitGraph:
         ret = {}
         for c, edge in edges_map.items():
             if c[0] == self._element_prefixes[2]:
-                ret[c] = edge
-        return ret
-
-    def getPhaseSlipEdges(self) -> dict[str, CircuitGraphEdge]:
-        """ Gets a mapping of all edges that contain a phase-slip nanowire.
-        """
-        edges_map = {self.components_map[k]: k for k in self.sc_spanning_tree_wc.edges}
-        ret = {}
-        for c, edge in edges_map.items():
-            if c[0] == self._element_prefixes[3]:
                 ret[c] = edge
         return ret
 

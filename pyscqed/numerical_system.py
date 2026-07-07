@@ -401,18 +401,7 @@ class NumericalSystem(TempData):
         else:
             i = self.SS.edges.index(edge)
             return Jvec[i] * self.units.getPrefactor("Ej")
-    
-    def getPhaseSlipEnergies(self, edge: CircuitGraphEdge | None = None) -> dict[CircuitGraphEdge, float] | float:
-        Pvec = self.state.numerical_parts.phase_slip_vector
-        if edge is None:
-            ret = {}
-            for i, edge in enumerate(self.SS.edges):
-                ret[edge] = Pvec[i] * self.units.getPrefactor("Ep")
-            return ret
-        else:
-            i = self.SS.edges.index(edge)
-            return Pvec[i] * self.units.getPrefactor("Ep")
-    
+
     def getResonatorResponse(
         self,
         energies: EigenvalueResult,

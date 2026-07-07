@@ -42,7 +42,6 @@ SYMBOLIC_PART_ATTRIBUTES = [
     "inverse_inductance_matrix",
     "branch_inverse_inductance_matrix",
     "josephson_vector",
-    "phase_slip_vector",
     "charge_bias_vector",
     "branch_charge_bias_vector",
     "branch_flux_bias_vector",
@@ -60,7 +59,6 @@ def test_simulation_state_attributes_match_symbolic_system():
     assert parts.branch_inverse_inductance_matrix == \
         symbolic.getInverseInductanceMatrix(mode="branch")
     assert parts.josephson_vector == symbolic.getJosephsonVector()
-    assert parts.phase_slip_vector == symbolic.getPhaseSlipVector()
     assert parts.charge_bias_vector == symbolic.getChargeBiasVector()
     assert parts.branch_charge_bias_vector == \
         symbolic.Rnb * symbolic.getChargeBiasVector()
@@ -233,11 +231,6 @@ def test_numerical_parts_from_symbolic_parts():
     assert np.allclose(
         numeric.josephson_vector,
         np.asarray(parts.josephson_vector.subs(subs), dtype=np.float64)[:, 0]
-    )
-    assert numeric.phase_slip_vector.ndim == 1
-    assert np.allclose(
-        numeric.phase_slip_vector,
-        np.asarray(parts.phase_slip_vector.subs(subs), dtype=np.float64)[:, 0]
     )
     assert np.allclose(
         numeric.charge_bias_vector,

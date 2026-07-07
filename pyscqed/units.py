@@ -360,10 +360,7 @@ class Units:
     
     def _getEjUnit(self) -> float:
         return self.cd['Energy']['factor']*self.c['Wb']['factor']*self.c['A']['factor']/(2*np.pi)
-    
-    def _getEpUnit(self) -> float:
-        return self.cd['Energy']['factor']*self.c['C']['factor']*self.c['V']['factor']/(2*np.pi)
-    
+
     def _getFreqUnit(self) -> float:
         return 1.0/(self.c['Hz']['factor']*np.sqrt(self.c['F']['factor']*self.c['H']['factor'])*2*np.pi)
     
@@ -405,7 +402,6 @@ class Units:
             "Ec":self._getEcUnit(),
             "El":self._getElUnit(),
             "Ej":self._getEjUnit(),
-            "Ep":self._getEpUnit(),
             "Freq":self._getFreqUnit(),
             "Impe":self._getImpeUnit(),
             "FlxOsc":self._getFlxOscUnit(),
