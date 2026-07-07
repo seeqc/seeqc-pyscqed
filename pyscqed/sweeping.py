@@ -22,12 +22,12 @@ ALLOWED_DTYPES = {"int64", "float64"}
 
 
 class SweepConfig:
-    def __init__(self, collection: ParamCollection):
+    def __init__(self, collection: ParamCollection) -> None:
         self._collection = collection
         self._sweep_data: dict[str, SweepVector] = {}
         self._evaluation_graph: EvaluationGraph | None = None
 
-    def add(self, name: str, values: list[float] | SweepVector):
+    def add(self, name: str, values: list[float] | SweepVector) -> None:
         """Adds a sweep dimension with the specified values."""
         if name in self._sweep_data:
             raise ValueError(f"Parameter \"{name}\" is already in the sweep.")
@@ -118,7 +118,7 @@ class SweepConfig:
 
 
 class SweepResult:
-    def __init__(self, sweep_config: SweepConfig, data: np.ndarray):
+    def __init__(self, sweep_config: SweepConfig, data: np.ndarray) -> None:
         self.sweep_config = sweep_config
         self.parameter_axes = sweep_config.getSweepAxes()
         self.data: np.ndarray = data
@@ -275,7 +275,7 @@ class SweepResult:
 
 
 class SweepResultFromMemory(SweepResult):
-    def __init__(self, sweep_config: SweepConfig, data: list[EvaluationResult]):
+    def __init__(self, sweep_config: SweepConfig, data: list[EvaluationResult]) -> None:
         super().__init__(sweep_config, np.array(data))
 
     def _retrieve_data(self, source: Any) -> EvaluationResult:
@@ -283,7 +283,7 @@ class SweepResultFromMemory(SweepResult):
 
 
 class SweepResultFromDisk(SweepResult):
-    def __init__(self, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]):
+    def __init__(self, sweep_config: SweepConfig, files: list[str | bytes | os.PathLike]) -> None:
         data = np.array([str(file) for file in files])
         super().__init__(sweep_config, data)
 
