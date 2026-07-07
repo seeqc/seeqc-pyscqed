@@ -44,5 +44,5 @@ class SweepNumericalResult:
     data: dict[EvalKeys, np.ndarray]
     source: str
 
-    def __getitem__(self, subscript):
+    def __getitem__(self, subscript: EvalKeys) -> np.ndarray:
         return self.data[subscript]

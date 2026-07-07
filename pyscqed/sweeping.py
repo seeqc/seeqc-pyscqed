@@ -44,7 +44,7 @@ class SweepConfig:
         """Retrieves a sweep dimension."""
         return self._sweep_data[name]
 
-    def setEvaluationGraph(self, graph: EvaluationGraph):
+    def setEvaluationGraph(self, graph: EvaluationGraph) -> None:
         """Sets the evaluation graph for this sweep."""
         self._evaluation_graph = graph
 
