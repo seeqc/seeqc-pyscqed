@@ -171,11 +171,6 @@ class CircuitGraph:
         for node in self.circuit_graph.nodes:
             self.resonators_cap[node] = None
 
-    def coupleResonatorInductively(self, edge: str, component: str, frequency: str, impedance: float = 50.0) -> None:
-        """ Couples a linear resonator inductively.
-        """
-        pass
-
     def addFluxBias(self, edge_component: str, suffix: str, mutual_inductance: str | None = None) -> None:
         """ Adds a flux bias term to the specified branch.
         """
