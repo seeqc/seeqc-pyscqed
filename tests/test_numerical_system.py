@@ -332,6 +332,24 @@ def test_spectrum_flux_dependence_independent_of_operator_basis():
     assert np.allclose(E1, E2, atol=1e-5, rtol=0)
 
 
+def test_spectrum_basis_independence():
+    hamil = get_flux_qubit("charge")
+    sweep_config = hamil.newSweepConfig()
+    sweep_config.add('phiZ', np.linspace(-1.0, 1.0, 11))
+    sweep_config.add('L', np.linspace(500, 600, 3))
+    sweep = hamil.runSweep(sweep_config)
+    E1 = sweep.getNumericalOutput(['phiZ', 'L'])
+    
+    hamil = get_flux_qubit("oscillator")
+    sweep_config = hamil.newSweepConfig()
+    sweep_config.add('phiZ', np.linspace(-1.0, 1.0, 11))
+    sweep_config.add('L', np.linspace(500, 600, 3))
+    sweep = hamil.runSweep(sweep_config)
+    E2 = sweep.getNumericalOutput(['phiZ', 'L'])
+
+    assert np.allclose(E1, E2, atol=1e-5, rtol=0)
+
+
 def test_spectrum_circuit_element_dependence_independent_of_operator_basis():
     hamil = get_resonator("charge")
     sweep_config = hamil.newSweepConfig()

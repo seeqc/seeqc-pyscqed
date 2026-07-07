@@ -114,6 +114,8 @@ class CircuitOperators:
         self._node_list = list(node_list)
         self.operator_data = {}
         self.circ_operators = {}
+        self.charge_op_vector = None
+        self.flux_op_vector = None
 
     def __getitem__(self, node):
         """ Returns the expanded operator dictionary of the given node. """
@@ -157,6 +159,16 @@ class CircuitOperators:
             Olist[i] = ops.Ddag
             op_dict["disp_adj"] = qt.tensor(Olist)
             self.circ_operators[node] = op_dict
+
+        # Collect the operator vectors in node order
+        self.charge_op_vector = self._collect_operator_vector("charge")
+        self.flux_op_vector = self._collect_operator_vector("flux")
+
+    def _collect_operator_vector(self, key):
+        vector = np.empty((len(self._node_list), 1), dtype=object)
+        for i, node in enumerate(self._node_list):
+            vector[i, 0] = self.circ_operators[node][key]
+        return vector
 
     def regenerateDependentOperators(self, symbols):
         """ Regenerates the expanded operators of the nodes whose operators depend on any of

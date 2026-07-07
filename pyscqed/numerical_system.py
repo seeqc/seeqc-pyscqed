@@ -160,20 +160,6 @@ class NumericalSystem(TempData):
     #       Hamiltonian Building Functions
     ###################################################################################################################
     
-    def getChargeOpVector(self):
-        pos_ops = {k: v["charge"] for k, v in self.circ_operators.items()}
-        arr = []
-        for node in self.getNodeList():
-            arr.append(pos_ops[node])
-        self.Qnp = self._init_qobj_vector(arr, dtype=object)
-    
-    def getFluxOpVector(self):
-        pos_ops = {k: v["flux"] for k, v in self.circ_operators.items()}
-        arr = []
-        for node in self.getNodeList():
-            arr.append(pos_ops[node])
-        self.Pnp = self._init_qobj_vector(arr, dtype=object)
-    
     def getSymbolicExpressions(self):
         """ Collects the symbolic expressions required to build the numerical Hamiltonian
         into a :class:`~pyscqed.simulation_state._SymbolicParts` instance. """
@@ -181,8 +167,6 @@ class NumericalSystem(TempData):
     
     def prepareOperators(self):
         self.circuit_operators.generateExpandedOperators()
-        self.getChargeOpVector()
-        self.getFluxOpVector()
 
     ###################################################################################################################
     #       Analysis Support
@@ -206,8 +190,8 @@ class NumericalSystem(TempData):
     
     def getLinearPart(self):
         parts = self._numerical_parts
-        Q = self.Qnp + parts.charge_bias_vector
-        P = self.Pnp + parts.inductive_flux_bias_vector
+        Q = self.circuit_operators.charge_op_vector + parts.charge_bias_vector
+        P = self.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
 
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
@@ -272,8 +256,8 @@ class NumericalSystem(TempData):
     
     def getHamiltonian(self) -> qt.Qobj:
         parts = self._numerical_parts
-        Q = self.Qnp + parts.charge_bias_vector
-        P = self.Pnp + parts.inductive_flux_bias_vector
+        Q = self.circuit_operators.charge_op_vector + parts.charge_bias_vector
+        P = self.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
 
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
@@ -412,7 +396,7 @@ class NumericalSystem(TempData):
         
         # Get charge superoperator including charge offsets
         parts = self._numerical_parts
-        Q = self.Qnp + parts.charge_bias_vector
+        Q = self.circuit_operators.charge_op_vector + parts.charge_bias_vector
 
         # Use the inverse capacitance matrix
         return self.units.getPrefactor("Vop") * Q[i, 0] * \
@@ -496,7 +480,8 @@ class NumericalSystem(TempData):
         
         # Get the operator associated with selected node
         index = self.getNodeList().index(cpl_node)
-        Op = self.Qnp[index, 0] + self._numerical_parts.charge_bias_vector[index, 0]
+        Op = self.circuit_operators.charge_op_vector[index, 0] + \
+            self._numerical_parts.charge_bias_vector[index, 0]
         
         # Get coupling terms
         E = energies.data - energies.data[0]
@@ -675,13 +660,6 @@ class NumericalSystem(TempData):
     ###################################################################################################################
     #       Internal Functions
     ###################################################################################################################
-    # Replaces np asmatrix
-    def _init_qobj_vector(self, obj_list, dtype=None):
-        obj = np.empty((len(obj_list), 1) , dtype=dtype)
-        for i, op in enumerate(obj_list):
-            obj[i, 0] = op
-        return obj
-    
     # FIXME: This causes issues when regenerating code
     def _set_parameter_units(self):
         

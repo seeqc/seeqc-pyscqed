@@ -218,6 +218,7 @@ def test_sweep_does_not_regenerate_charge_basis_operators():
     # Charge basis operators do not depend on the swept parameter, so no
     # regeneration is scheduled and the operators are untouched
     assert hamil.circ_operators[1]["charge"] is old_charge
+    assert hamil.circuit_operators.charge_op_vector[0, 0] is old_charge
 
 
 def test_sweep_regenerates_oscillator_basis_operators():
@@ -233,6 +234,8 @@ def test_sweep_regenerates_oscillator_basis_operators():
     # The oscillator impedance depends on the swept parameter, so regeneration
     # is scheduled and the operator vectors must track the new operators
     assert hamil.circ_operators[1]["charge"] is not old_charge
+    assert hamil.circuit_operators.charge_op_vector[0, 0] is \
+        hamil.circ_operators[1]["charge"]
 
 
 def test_circuit_operators_expansion():
@@ -243,6 +246,12 @@ def test_circuit_operators_expansion():
     assert set(ops.circ_operators[1].keys()) == {"charge", "flux", "disp", "disp_adj"}
     assert ops[1] is ops.circ_operators[1]
     assert ops[1]["charge"].shape == (7, 7)
+
+    # The operator vectors collect the expanded operators
+    assert ops.charge_op_vector.shape == (1, 1)
+    assert ops.flux_op_vector.shape == (1, 1)
+    assert ops.charge_op_vector[0, 0] is ops[1]["charge"]
+    assert ops.flux_op_vector[0, 0] is ops[1]["flux"]
 
 
 def test_circuit_operators_expansion_multiple_nodes():
@@ -261,6 +270,13 @@ def test_circuit_operators_expansion_multiple_nodes():
         for key2 in keys:
             commutator = qt.commutator(ops[1][key1], ops[2][key2])
             assert commutator.norm() == pytest.approx(0.0)
+
+    # The operator vectors collect the expanded operators in node order
+    assert ops.charge_op_vector.shape == (2, 1)
+    assert ops.flux_op_vector.shape == (2, 1)
+    for i, node in enumerate([1, 2]):
+        assert ops.charge_op_vector[i, 0] is ops[node]["charge"]
+        assert ops.flux_op_vector[i, 0] is ops[node]["flux"]
 
 
 def test_circuit_operators_rejects_invalid_node_operators():
@@ -284,10 +300,12 @@ def test_circuit_operators_regenerates_dependent_nodes():
     # Symbols the operators do not depend on leave them untouched
     circuit_ops.regenerateDependentOperators({symbolic.getSymbol("I")})
     assert circuit_ops[1]["charge"] is old_charge
+    assert circuit_ops.charge_op_vector[0, 0] is old_charge
 
     # Symbols the impedance depends on trigger regeneration
     circuit_ops.regenerateDependentOperators({symbolic.getSymbol("C")})
     assert circuit_ops[1]["charge"] is not old_charge
+    assert circuit_ops.charge_op_vector[0, 0] is circuit_ops[1]["charge"]
 
 
 def test_numerical_system_holds_circuit_operators():
