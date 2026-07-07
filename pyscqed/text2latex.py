@@ -50,7 +50,7 @@ supported_symbols = {
 }
 
 # Attempt to turn a string into a latex code
-def latexify_param_name(param_string):
+def latexify_param_name(param_string: str) -> str:
     
     latex_string = ""
     
