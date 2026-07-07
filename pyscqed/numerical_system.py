@@ -104,10 +104,6 @@ class NumericalSystem(TempData):
         space size. """
         return self.state.sparsity(op)
     
-    ###################################################################################################################
-    #       Operator Generation and Functions
-    ###################################################################################################################
-        
     def configureOperator(self, node, trunc, basis):
         if node not in self.getNodeList():
             raise Exception("Node '%i' is not a valid circuit node." % node)
@@ -120,18 +116,12 @@ class NumericalSystem(TempData):
         else:
             raise Exception("Unrecognized basis representation '%s'." % repr(basis))
 
-    ###################################################################################################################
-    #       Analysis Support
-    ###################################################################################################################
     def getClassicalPotentialFunction(self):
         """Returns a function that takes the flux circuit degrees of freedom and the flux bias terms as scalars and
         returns the potential energy at those coordinates. It can be used with numpy arrays too."""
         builder = ClassicalPotentialBuilder(self)
         return builder.getPotentialFunction(), builder.getDefaultInputs()
 
-    ###################################################################################################################
-    #       Numerical Hamiltonian Generation
-    ###################################################################################################################
     def substitute(self):
         """ Substitutes all current parameter values into the symbolic expressions, collecting
         the numerical arrays into a :class:`~pyscqed.simulation_state._NumericalParts`
