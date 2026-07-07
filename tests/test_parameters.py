@@ -125,6 +125,25 @@ class ParamCollectionTest(unittest.TestCase):
         pc.setParameterValues(*set2)
         self.assertTrue(pc.allParametersSet())
 
+    def test_parameter_registration_rules(self):
+        pc = ParamCollection(self.names)
+
+        # addParameter rejects non-string names and invalid symbol overrides
+        self.assertRaises(TypeError, pc.addParameter, 1)
+        self.assertRaises(TypeError, pc.addParameter, "Lx", symbol_override="s")
+
+        # Adding an existing parameter is a no-op that preserves the original symbol
+        symbol = pc.getSymbol("L1")
+        pc.addParameter("L1")
+        self.assertTrue(pc.getSymbol("L1") is symbol)
+
+        # addParameterisation rejects unknown parameters and unregistered symbols
+        symbols = pc.getSymbolList()
+        self.assertRaises(
+            ValueError, pc.addParameterisation, "unknown", symbols["L1"] + symbols["L2"])
+        self.assertRaises(
+            ValueError, pc.addParameterisation, "Jc", sy.Symbol("unregistered"))
+
     def test_parametric_expressions_symbolic(self):
         # Setup the param collection
         pc = ParamCollection(self.names)
@@ -209,9 +228,3 @@ class ParamCollectionTest(unittest.TestCase):
         self.assertTrue(np.isclose(
             values_dict['Long_one'], 10*np.cos(2*np.pi*np.sqrt(0.5 * (L1 + L2))*Jc), rtol=0, atol=1e-14)
         )
-
-    def test_parameter_sweeping(self):
-        pass
-
-    def test_can_use_param_with_none_value(self):
-        pass
