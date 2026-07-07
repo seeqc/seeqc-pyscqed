@@ -4,6 +4,8 @@ import qutip as qt
 import sympy as sy
 
 from . import physical_constants as pc
+from .symbolic_system import SymbolicSystem
+from .units import Units
 
 # Local override for the Qobj tolerance. The global settings appear to not work
 _qobj_atol = 1e-12
@@ -15,7 +17,7 @@ class NodeOperators:
     flux (``P``) and Josephson displacement (``D``, ``Ddag``) operators.
     """
 
-    def __init__(self, node, truncation):
+    def __init__(self, node: int, truncation: int) -> None:
         self.node = node
         self.truncation = truncation
         self.Q = None
@@ -24,15 +26,15 @@ class NodeOperators:
         self.Ddag = None
 
     @property
-    def dimension(self):
+    def dimension(self) -> int:
         """ The Hilbert space dimension of this degree of freedom. """
         raise NotImplementedError
 
-    def getIdentity(self):
+    def getIdentity(self) -> qt.Qobj:
         """ Returns the identity operator used to expand into the total Hilbert space. """
         return qt.qeye(self.dimension)
 
-    def generate(self, symbolic_system=None, units=None):
+    def generate(self, symbolic_system: SymbolicSystem | None = None, units: Units | None = None) -> None:
         """ Populates ``Q``, ``P``, ``D`` and ``Ddag`` from the current parameter values.
 
         :param symbolic_system: required by bases whose operators depend on the circuit.
@@ -40,12 +42,12 @@ class NodeOperators:
         """
         raise NotImplementedError
 
-    def dependsOnSymbols(self, symbols):
+    def dependsOnSymbols(self, symbols: set[sy.Symbol]) -> bool:
         """ Returns whether the operators need regenerating when any of the given symbols
         change value. """
         return False
 
-    def sameConfiguration(self, other):
+    def sameConfiguration(self, other: "NodeOperators") -> bool:
         """ Returns whether ``other`` is configured to generate the same operators as
         this instance. """
         return type(other) is type(self) and other.truncation == self.truncation
@@ -55,10 +57,10 @@ class ChargeBasisOperators(NodeOperators):
     """Charge basis operators for a single circuit node degree of freedom."""
 
     @property
-    def dimension(self):
+    def dimension(self) -> int:
         return 2*self.truncation + 1
 
-    def generate(self, symbolic_system=None, units=None):
+    def generate(self, symbolic_system: SymbolicSystem | None = None, units: Units | None = None) -> None:
         trunc = self.truncation
 
         # For IJ modes the charge states are the eigenvectors of the following matrix
@@ -108,21 +110,21 @@ class OscillatorBasisOperators(NodeOperators):
     parameterisations on the symbolic system.
     """
 
-    def __init__(self, node, truncation):
+    def __init__(self, node: int, truncation: int) -> None:
         super().__init__(node, truncation)
         self.frequency = None
         self.impedance = None
 
     @property
-    def dimension(self):
+    def dimension(self) -> int:
         return self.truncation
 
-    def dependsOnSymbols(self, symbols):
+    def dependsOnSymbols(self, symbols: set[sy.Symbol]) -> bool:
         if self.impedance is None:
             return False
         return not self.impedance.free_symbols.isdisjoint(symbols)
 
-    def generate(self, symbolic_system=None, units=None):
+    def generate(self, symbolic_system: SymbolicSystem | None = None, units: Units | None = None) -> None:
         if symbolic_system is None or units is None:
             raise ValueError(
                 "The symbolic system and units are required to generate oscillator "
@@ -160,7 +162,7 @@ class OscillatorBasisOperators(NodeOperators):
         self.D = D.to("CSR").tidyup(_qobj_atol)
         self.Ddag = D.dag().to("CSR").tidyup(_qobj_atol)
 
-    def _derive_oscillator_parameters(self, symbolic_system):
+    def _derive_oscillator_parameters(self, symbolic_system: SymbolicSystem) -> None:
         # Derive the oscillator parameters from the circuit
         index = symbolic_system.nodes.index(self.node)
         Linv = symbolic_system.getInverseInductanceMatrix()
