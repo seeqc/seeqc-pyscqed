@@ -139,7 +139,7 @@ class Units:
         "a":"\\mathrm{a}"
     }
     
-    def __init__(self, name, system="SI"):
+    def __init__(self, name: str, system: str = "SI") -> None:
         
         # Initialise the base unit conversion values
         self.c = {}
@@ -159,7 +159,7 @@ class Units:
         if name in units_presets.keys():
             self.loadPreset(name)
     
-    def loadPreset(self, preset):
+    def loadPreset(self, preset: str) -> None:
         """ Load a preset.
         
         :param preset: The name of the preset.
@@ -175,7 +175,7 @@ class Units:
             self.c[key] = units_presets[preset][key]
         self._updatePrefactors()
     
-    def setUnit(self, new_unit):
+    def setUnit(self, new_unit: str) -> None:
         """ Set an input unit. The prefix and the unit are detected to determine the correct factor.
         
         :param new_unit: The new unit to use, for example 'mA' for milli-Ampere.
@@ -201,7 +201,7 @@ class Units:
         self.c[u] = {'unit':new_unit, 'factor':self.__prefixes[p]}
         self._updatePrefactors()
     
-    def setUnitPrefactor(self, unit, new_unit, value):
+    def setUnitPrefactor(self, unit: str, new_unit: str, value: float) -> None:
         """ Set an input unit prefactor directly. This allows specifying units in terms of physical constants.
         
         :param unit: The base unit of the selected system to use, form example 'A' for Ampere in the SI system.
@@ -224,7 +224,7 @@ class Units:
         self.c[unit] = {'unit':new_unit, 'factor':value}
         self._updatePrefactors()
     
-    def getUnitPrefactor(self, unit):
+    def getUnitPrefactor(self, unit: str) -> float:
         """ Get an unit prefactor.
         
         :param unit: The base unit of the selected system to get, form example 'A' for Ampere in the SI system.
@@ -240,7 +240,7 @@ class Units:
             raise Exception("SI unit '%s' not found" % unit)
         return self.c[unit]['factor']
     
-    def setEnergyUnit(self, new_unit):
+    def setEnergyUnit(self, new_unit: str) -> None:
         """ Set the output energy unit. The prefix and the unit are detected to determine the correct factor. A number of commonly used units are available, such as Kelvin and electron-Volts.
         
         :param new_unit: The new unit to use, for example 'keV' for kilo-electron-Volts.
@@ -273,7 +273,7 @@ class Units:
             raise Exception("incompatible unit for Energy '%s'" % unit)
         self._updatePrefactors()
     
-    def setCurrentUnit(self, new_unit):
+    def setCurrentUnit(self, new_unit: str) -> None:
         """ Set the output current unit. The prefix and the unit are detected to determine the correct factor.
         
         :param new_unit: The new unit to use, for example 'mA' for milli-Ampere.
@@ -299,7 +299,7 @@ class Units:
             raise Exception("incompatible unit for Current '%s'" % unit)
         self._updatePrefactors()
     
-    def setVoltageUnit(self, new_unit):
+    def setVoltageUnit(self, new_unit: str) -> None:
         """ Set the output voltage unit. The prefix and the unit are detected to determine the correct factor.
         
         :param new_unit: The new unit to use, for example 'mV' for milli-Volt.
@@ -325,22 +325,22 @@ class Units:
             raise Exception("incompatible unit for Voltage '%s'" % unit)
         self._updatePrefactors()
     
-    def convertEnergy(self, data, old_unit, new_unit):
+    def convertEnergy(self, data: float, old_unit: str, new_unit: str) -> None:
         """ Convert given data between energy units.
         """
         pass
     
-    def convertCurrent(self, data, old_unit, new_unit):
+    def convertCurrent(self, data: float, old_unit: str, new_unit: str) -> None:
         """ Convert given data between current units.
         """
         pass
     
-    def convertVoltage(self, data, old_unit, new_unit):
+    def convertVoltage(self, data: float, old_unit: str, new_unit: str) -> None:
         """ Convert given data between voltage units.
         """
         pass
     
-    def getPrefactor(self, name):
+    def getPrefactor(self, name: str) -> float:
         """ Get the unit conversion value for a specific term.
         
         :param name: The name of the conversion value to get.
@@ -350,57 +350,57 @@ class Units:
         """
         return self.prefactors[name]
     
-    def _getEcUnit(self):
+    def _getEcUnit(self) -> float:
         """ Get the charging energy unit.
         """
         return self.cd['Energy']['factor']*self.c['C']['factor']**2/self.c['F']['factor']
     
-    def _getElUnit(self):
+    def _getElUnit(self) -> float:
         return self.cd['Energy']['factor']*self.c['Wb']['factor']**2/self.c['H']['factor']
     
-    def _getEjUnit(self):
+    def _getEjUnit(self) -> float:
         return self.cd['Energy']['factor']*self.c['Wb']['factor']*self.c['A']['factor']/(2*np.pi)
     
-    def _getEpUnit(self):
+    def _getEpUnit(self) -> float:
         return self.cd['Energy']['factor']*self.c['C']['factor']*self.c['V']['factor']/(2*np.pi)
     
-    def _getFreqUnit(self):
+    def _getFreqUnit(self) -> float:
         return 1.0/(self.c['Hz']['factor']*np.sqrt(self.c['F']['factor']*self.c['H']['factor'])*2*np.pi)
     
-    def _getImpeUnit(self):
+    def _getImpeUnit(self) -> float:
         return np.sqrt(self.c['H']['factor']/self.c['F']['factor'])
     
-    def _getFlxOscUnit(self):
+    def _getFlxOscUnit(self) -> float:
         return np.sqrt(pc.hbar)/self.c['Wb']['factor']
     
-    def _getChgOscUnit(self):
+    def _getChgOscUnit(self) -> float:
         return np.sqrt(pc.hbar)/self.c['C']['factor']
     
-    def _getVopUnit(self):
+    def _getVopUnit(self) -> float:
         return self.cd['Voltage']['factor']*self.c['C']['factor']/self.c['F']['factor']
     
-    def _getIopLUnit(self):
+    def _getIopLUnit(self) -> float:
         return self.cd['Current']['factor']*self.c['Wb']['factor']/self.c['H']['factor']
     
-    def _getIopJUnit(self):
+    def _getIopJUnit(self) -> float:
         return self.cd['Current']['factor']*self.c['A']['factor']
     
-    def _getFlxUnit(self):
+    def _getFlxUnit(self) -> float:
         return self.c['Wb']['factor']
     
-    def _getChgUnit(self):
+    def _getChgUnit(self) -> float:
         return self.c['C']['factor']
     
-    def _getPhaUnit(self):
+    def _getPhaUnit(self) -> float:
         return self.c['Wb']['factor']/pc.phi0
     
-    def _getChgOscCplUnit(self):
+    def _getChgOscCplUnit(self) -> float:
         return self.cd['Energy']['factor']*np.sqrt(pc.hbar)*self.c['C']['factor']/(self.c['F']['factor']*(self.c['H']['factor']/self.c['F']['factor'])**(0.25))
     
-    def _getFlxOscCplUnit(self):
+    def _getFlxOscCplUnit(self) -> float:
         return 0.0
     
-    def _updatePrefactors(self):
+    def _updatePrefactors(self) -> None:
         self.prefactors = {
             "Ec":self._getEcUnit(),
             "El":self._getElUnit(),
