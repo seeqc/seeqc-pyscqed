@@ -1,6 +1,7 @@
 """Containers and manager for the derived state used by the numerical simulation."""
 import numpy as np
 import qutip as qt
+import sympy as sy
 
 from .operators import NodeOperators
 from .symbolic_system import SymbolicSystem
@@ -18,7 +19,7 @@ class _SymbolicPartsBase:
         :class:`~pyscqed.symbolic_system.SymbolicSystem` instance.
     """
 
-    def __init__(self, symbolic_system: SymbolicSystem):
+    def __init__(self, symbolic_system: SymbolicSystem) -> None:
         if not isinstance(symbolic_system, SymbolicSystem):
             raise TypeError(
                 "symbolic_system must be a SymbolicSystem instance, got '%s'."
@@ -47,7 +48,7 @@ class _SymbolicPartsBase:
         self.inductive_flux_bias_vector = self._prepare(
             symbolic_system.getFluxBiasVectorInd())
 
-    def _prepare(self, expression):
+    def _prepare(self, expression: sy.Matrix) -> sy.Matrix:
         raise NotImplementedError
 
 
@@ -55,7 +56,7 @@ class _SymbolicParts(_SymbolicPartsBase):
     """Unmodified symbolic expressions extracted from a
     :class:`~pyscqed.symbolic_system.SymbolicSystem`. """
 
-    def _prepare(self, expression):
+    def _prepare(self, expression: sy.Matrix) -> sy.Matrix:
         return expression
 
 
@@ -63,11 +64,11 @@ class _MixedParts(_SymbolicPartsBase):
     """Symbolic expressions with the static parameters of a sweep substituted, leaving the
     swept symbols free. """
 
-    def __init__(self, symbolic_system: SymbolicSystem, substitutions):
+    def __init__(self, symbolic_system: SymbolicSystem, substitutions: dict[sy.Symbol, float]) -> None:
         self._substitutions = substitutions
         super().__init__(symbolic_system)
 
-    def _prepare(self, expression):
+    def _prepare(self, expression: sy.Matrix) -> sy.Matrix:
         return expression.subs(self._substitutions)
 
 
@@ -79,14 +80,14 @@ class _NumericalParts:
         instance.
     """
 
-    def __init__(self, parts: _SymbolicPartsBase, substitutions):
+    def __init__(self, parts: _SymbolicPartsBase, substitutions: dict[sy.Symbol, float]) -> None:
         if not isinstance(parts, _SymbolicPartsBase):
             raise TypeError(
                 "parts must be a _SymbolicParts or _MixedParts instance, got '%s'."
                 % type(parts).__name__
             )
 
-        def to_array(expression):
+        def to_array(expression: sy.Matrix) -> np.ndarray:
             return np.asarray(expression.subs(substitutions), dtype=np.float64)
 
         self.inverse_capacitance_matrix = to_array(parts.inverse_capacitance_matrix)
@@ -112,26 +113,26 @@ class CircuitOperators:
     :param node_list: the circuit nodes in matrix ordering.
     """
 
-    def __init__(self, node_list):
+    def __init__(self, node_list: list[int]) -> None:
         self._node_list = list(node_list)
         self._operator_data = {}
         self._circ_operators = {}
         self.charge_op_vector = None
         self.flux_op_vector = None
 
-    def __getitem__(self, node):
+    def __getitem__(self, node: int) -> dict[str, qt.Qobj]:
         """ Returns the expanded operator dictionary of the given node. """
         return self._circ_operators[node]
 
-    def __contains__(self, node):
+    def __contains__(self, node: int) -> bool:
         """ Returns whether the given node has an assigned operator generator. """
         return node in self._operator_data
 
-    def getNodeOperators(self, node):
+    def getNodeOperators(self, node: int) -> NodeOperators:
         """ Returns the operator generator of the given node. """
         return self._operator_data[node]
 
-    def getHilbertSpaceSize(self):
+    def getHilbertSpaceSize(self) -> int:
         """ Returns the total Hilbert space size considering the operator truncations of
         all nodes. """
         ret = 1
@@ -139,7 +140,7 @@ class CircuitOperators:
             ret *= ops.dimension
         return ret
 
-    def setNodeOperators(self, node, node_operators: NodeOperators):
+    def setNodeOperators(self, node: int, node_operators: NodeOperators) -> None:
         """ Assigns the operator generator for the given node.
 
         :raises TypeError: if ``node_operators`` is not a
@@ -152,7 +153,12 @@ class CircuitOperators:
             )
         self._operator_data[node] = node_operators
 
-    def generateExpandedOperators(self, nodes=None, symbolic_system=None, units=None):
+    def generateExpandedOperators(
+        self,
+        nodes: list[int] | None = None,
+        symbolic_system: SymbolicSystem | None = None,
+        units: Units | None = None
+    ) -> None:
         """ Generates the operators of each node (all if ``nodes`` is None) and expands them
         into the total Hilbert space. The symbolic system and units are passed through to
         the operator generators that require them. """
@@ -183,13 +189,18 @@ class CircuitOperators:
         self.charge_op_vector = self._collect_operator_vector("charge")
         self.flux_op_vector = self._collect_operator_vector("flux")
 
-    def _collect_operator_vector(self, key):
+    def _collect_operator_vector(self, key: str) -> np.ndarray:
         vector = np.empty((len(self._node_list), 1), dtype=object)
         for i, node in enumerate(self._node_list):
             vector[i, 0] = self._circ_operators[node][key]
         return vector
 
-    def regenerateDependentOperators(self, symbols, symbolic_system=None, units=None):
+    def regenerateDependentOperators(
+        self,
+        symbols: dict[sy.Symbol, float],
+        symbolic_system: SymbolicSystem | None = None,
+        units: Units | None = None
+    ) -> None:
         """ Regenerates the expanded operators of the nodes whose operators depend on any of
         the given symbols. """
         symbols = set(symbols)
@@ -211,7 +222,7 @@ class SimulationState:
         :class:`~pyscqed.symbolic_system.SymbolicSystem` instance.
     """
 
-    def __init__(self, symbolic_system: SymbolicSystem, units=Units("CQED1")):
+    def __init__(self, symbolic_system: SymbolicSystem, units: Units = Units("CQED1")) -> None:
         if not isinstance(symbolic_system, SymbolicSystem):
             raise TypeError(
                 "symbolic_system must be a SymbolicSystem instance, got '%s'."
@@ -224,7 +235,7 @@ class SimulationState:
         self.mixed_parts: _MixedParts | None = None
         self.numerical_parts: _NumericalParts | None = None
 
-    def getOperator(self, node, kind):
+    def getOperator(self, node: int, kind: str) -> qt.Qobj:
         """ Returns the operator ``kind`` of the given node, expanded into the circuit
         Hilbert space.
 
@@ -232,17 +243,17 @@ class SimulationState:
         """
         return self.circuit_operators[node][kind]
 
-    def getHilbertSpaceSize(self):
+    def getHilbertSpaceSize(self) -> int:
         """ Returns the total Hilbert space size considering all currently defined
         operator truncations. """
         return self.circuit_operators.getHilbertSpaceSize()
 
-    def sparsity(self, op):
+    def sparsity(self, op: qt.Qobj) -> float:
         """ Returns the sparsity of the given operator relative to the total Hilbert
         space size. """
         return 1 - op.to("CSR").data.as_scipy().nnz/self.getHilbertSpaceSize()**2
 
-    def getCommutator(self, Q, P, basis="charge"):
+    def getCommutator(self, Q: qt.Qobj, P: qt.Qobj, basis: str = "charge") -> qt.Qobj | None:
         """ Returns the corrected commutator of the given conjugate operator pair.
 
         :param basis: the basis representation of the operators, ``"charge"`` or
@@ -266,7 +277,7 @@ class SimulationState:
             # Get the correct commutator
             return qt.commutator(P, Q)*corrmat
 
-    def setNodeOperators(self, node, node_operators: NodeOperators):
+    def setNodeOperators(self, node: int, node_operators: NodeOperators) -> None:
         """ Assigns the operator generator for the given node.
 
         An identical reconfiguration is skipped. A differing reconfiguration made after a
@@ -283,19 +294,19 @@ class SimulationState:
         else:
             self.circuit_operators.setNodeOperators(node, node_operators)
 
-    def substitute(self, substitutions):
+    def substitute(self, substitutions: dict[sy.Symbol, float]) -> None:
         """ Substitutes all parameter values into the symbolic expressions, populating
         :attr:`numerical_parts`, and generates the expanded node operators. """
         self.numerical_parts = _NumericalParts(self.symbolic_parts, substitutions)
         self.circuit_operators.generateExpandedOperators(
             symbolic_system=self._symbolic_system, units=self._units)
 
-    def substituteStatic(self, substitutions):
+    def substituteStatic(self, substitutions: dict[sy.Symbol, float]) -> None:
         """ Substitutes the static parameters of a sweep, leaving the swept symbols
         free and populating :attr:`mixed_parts`. """
         self.mixed_parts = _MixedParts(self._symbolic_system, substitutions)
 
-    def substituteSwept(self, substitutions):
+    def substituteSwept(self, substitutions: dict[sy.Symbol, float]) -> None:
         """ Substitutes the swept parameter values at the current sweep point,
         populating :attr:`numerical_parts` and regenerating the operators that depend
         on the swept symbols. """
