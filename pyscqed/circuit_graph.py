@@ -41,7 +41,7 @@ class CircuitGraph:
         "Loop"
     ]
 
-    def __init__(self, circuit_name: str = ""):
+    def __init__(self, circuit_name: str = "") -> None:
         """ Abstract description of a superconducting circuit.
         """
 
@@ -69,7 +69,7 @@ class CircuitGraph:
         # General undirected circuit graph
         self.circuit_graph = nx.MultiGraph(circuit_name=circuit_name)
 
-    def addBranch(self, n1: int, n2: int, component: str):
+    def addBranch(self, n1: int, n2: int, component: str) -> None:
         """ Adds a branch between two circuit nodes that contains a single component.
         """
 
@@ -89,7 +89,7 @@ class CircuitGraph:
         self._update_graphs()
         self._update_couplings_map((n1, n2, k))
 
-    def coupleBranchesInductively(self, inductor1: str, inductor2: str, mutual_inductance: str):
+    def coupleBranchesInductively(self, inductor1: str, inductor2: str, mutual_inductance: str) -> None:
         """ Couples two branches inductively.
         """
         if mutual_inductance[0] != self._element_prefixes[4]:
@@ -119,7 +119,7 @@ class CircuitGraph:
         # Update mapping
         self.coupled_branches[mutual_inductance] = (edge1, edge2)
 
-    def coupleResonatorCapacitively(self, node: int, component: str):
+    def coupleResonatorCapacitively(self, node: int, component: str) -> None:
         """ Couples a linear resonator capacitively.
         """
         if node not in self.circuit_graph.nodes:
@@ -165,18 +165,18 @@ class CircuitGraph:
             "Zrl": Zrd
         }
 
-    def removeAllResonators(self):
+    def removeAllResonators(self) -> None:
         """ Removes all resonator descriptions from the circuit graph.
         """
         for node in self.circuit_graph.nodes:
             self.resonators_cap[node] = None
 
-    def coupleResonatorInductively(self, edge, component, frequency, impedance=50.0):
+    def coupleResonatorInductively(self, edge: str, component: str, frequency: str, impedance: float = 50.0) -> None:
         """ Couples a linear resonator inductively.
         """
         pass
 
-    def addFluxBias(self, edge_component: str, suffix: str, mutual_inductance: str | None = None):
+    def addFluxBias(self, edge_component: str, suffix: str, mutual_inductance: str | None = None) -> None:
         """ Adds a flux bias term to the specified branch.
         """
         edge = self.getComponentEdge(edge_component)
@@ -218,7 +218,7 @@ class CircuitGraph:
             "suffix": suffix
         }
 
-    def addChargeBias(self, node: int, suffix: str, coupling_capacitance: str | None = None):
+    def addChargeBias(self, node: int, suffix: str, coupling_capacitance: str | None = None) -> None:
         """ Adds a charge bias term to the specified node.
         """
         if node not in self.circuit_graph.nodes:
@@ -391,7 +391,7 @@ class CircuitGraph:
     #
     # INTERNAL
     #
-    def _update_graphs(self):
+    def _update_graphs(self) -> None:
         self._get_conductive_graph()
         self._get_virtual_grounds()
         self._get_spanning_tree()
@@ -400,7 +400,7 @@ class CircuitGraph:
         self._get_sc_loops()
         self._get_loop_graph()
 
-    def _update_components_map(self):
+    def _update_components_map(self) -> None:
         # Get all components keyed by edge
         self.components_map = nx.get_edge_attributes(self.circuit_graph, "component")
 
@@ -415,14 +415,14 @@ class CircuitGraph:
             tmp[(k[1], k[0], k[2])] = v
         self.components_map.update(tmp)
 
-    def _update_couplings_map(self, edge):
+    def _update_couplings_map(self, edge: CircuitGraphEdge) -> None:
         n1, n2, k = edge
         if n1 not in self.resonators_cap.keys():
             self.resonators_cap[n1] = None
         if n2 not in self.resonators_cap.keys():
             self.resonators_cap[n2] = None
 
-    def _get_conductive_graph(self):
+    def _get_conductive_graph(self) -> None:
         labels = nx.get_edge_attributes(self.circuit_graph, "label")
         self.circuit_conductive_graph = nx.MultiGraph()
 
@@ -436,7 +436,7 @@ class CircuitGraph:
             self.circuit_conductive_graph.add_edge(edge[0], edge[1], key=edge[2],
                                                    component=component, label=labels[edge])
 
-    def _get_virtual_grounds(self):
+    def _get_virtual_grounds(self) -> None:
         labels = nx.get_edge_attributes(self.circuit_conductive_graph, "label")
         # Get connected graphs
         connected = [self.circuit_conductive_graph.subgraph(c).copy()\
@@ -474,7 +474,7 @@ class CircuitGraph:
                     self.virtual_grounds[n] = (closure_edges, S)
                     break
 
-    def _get_spanning_tree(self):
+    def _get_spanning_tree(self) -> None:
         S = nx.union_all([S for c, S in self.virtual_grounds.values()])
         labels = nx.get_edge_attributes(self.circuit_conductive_graph, "label")
 
@@ -484,7 +484,7 @@ class CircuitGraph:
         for edge in S.edges:
             self.sc_spanning_tree.add_edge(edge[0], edge[1], key=edge[2], edge_type="S", label=labels[edge])
 
-    def _get_sc_circuit(self):
+    def _get_sc_circuit(self) -> None:
         labels = nx.get_edge_attributes(self.circuit_conductive_graph, "label")
         self.sc_spanning_tree_wc = self.sc_spanning_tree.copy()
         for c, S in self.virtual_grounds.values():
@@ -493,7 +493,7 @@ class CircuitGraph:
                 label = labels[edger] if edge not in labels.keys() else labels[edge]
                 self.sc_spanning_tree_wc.add_edge(edge[0], edge[1], key=edge[2], edge_type="C", label=label)
 
-    def _get_sc_loops(self):
+    def _get_sc_loops(self) -> None:
         c = 0
         self.sc_loops = {}
         self.loop_closures = {}
@@ -513,12 +513,12 @@ class CircuitGraph:
                 self.loop_closures[c] = edge
                 c+=1
 
-    def _get_closure_branches(self):
+    def _get_closure_branches(self) -> None:
         self.closure_branches = []
         for closure_edges, S in self.virtual_grounds.values():
             self.closure_branches.extend(closure_edges)
 
-    def _get_loop_graph(self):
+    def _get_loop_graph(self) -> None:
         loop_graph_nodes = {}
         loop_graph_edges = {}
         multi_edges = set()
