@@ -45,6 +45,11 @@ class NodeOperators:
         change value. """
         return False
 
+    def sameConfiguration(self, other):
+        """ Returns whether ``other`` is configured to generate the same operators as
+        this instance. """
+        return type(other) is type(self) and other.truncation == self.truncation
+
 
 class ChargeBasisOperators(NodeOperators):
     """Charge basis operators for a single circuit node degree of freedom."""

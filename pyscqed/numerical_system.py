@@ -108,9 +108,9 @@ class NumericalSystem(TempData):
         if node not in self.getNodeList():
             raise Exception("Node '%i' is not a valid circuit node." % node)
         if basis == "charge":
-            self.state.circuit_operators.setNodeOperators(node, ChargeBasisOperators(node, trunc))
+            self.state.setNodeOperators(node, ChargeBasisOperators(node, trunc))
         elif basis == "oscillator":
-            self.state.circuit_operators.setNodeOperators(
+            self.state.setNodeOperators(
                 node, OscillatorBasisOperators(node, trunc)
             )
         else:

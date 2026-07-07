@@ -123,6 +123,10 @@ class CircuitOperators:
         """ Returns the expanded operator dictionary of the given node. """
         return self._circ_operators[node]
 
+    def __contains__(self, node):
+        """ Returns whether the given node has an assigned operator generator. """
+        return node in self._operator_data
+
     def getNodeOperators(self, node):
         """ Returns the operator generator of the given node. """
         return self._operator_data[node]
@@ -261,6 +265,23 @@ class SimulationState:
 
             # Get the correct commutator
             return qt.commutator(P, Q)*corrmat
+
+    def setNodeOperators(self, node, node_operators: NodeOperators):
+        """ Assigns the operator generator for the given node.
+
+        An identical reconfiguration is skipped. A differing reconfiguration made after a
+        substitution forces a new :meth:`substitute` call so the expanded operators and
+        numerical parts remain consistent.
+        """
+        if node in self.circuit_operators:
+            existing = self.circuit_operators.getNodeOperators(node)
+            if existing.sameConfiguration(node_operators):
+                return
+            self.circuit_operators.setNodeOperators(node, node_operators)
+            if self.numerical_parts is not None:
+                self.substitute(self._symbolic_system.getSymbolValuesDict())
+        else:
+            self.circuit_operators.setNodeOperators(node, node_operators)
 
     def substitute(self, substitutions):
         """ Substitutes all parameter values into the symbolic expressions, populating

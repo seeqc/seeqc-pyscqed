@@ -103,6 +103,17 @@ def test_oscillator_basis_operators_symbol_dependence():
     assert not ops.dependsOnSymbols({symbolic.getSymbol("I")})
 
 
+def test_node_operators_same_configuration():
+    charge = ChargeBasisOperators(1, 3)
+    assert charge.sameConfiguration(ChargeBasisOperators(1, 3))
+    assert not charge.sameConfiguration(ChargeBasisOperators(1, 4))
+
+    osc = OscillatorBasisOperators(1, 3)
+    assert not charge.sameConfiguration(osc)
+    assert not osc.sameConfiguration(charge)
+    assert osc.sameConfiguration(OscillatorBasisOperators(1, 3))
+
+
 def test_configure_operator_creates_node_operators():
     hamil = NumericalSystem(get_symbolic_system())
 

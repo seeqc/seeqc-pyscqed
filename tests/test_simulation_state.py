@@ -141,6 +141,43 @@ def test_simulation_state_sparsity():
     assert state.sparsity(qt.qeye(7)) == pytest.approx(1 - 1/7)
 
 
+def test_simulation_state_reconfiguration_forces_substitution():
+    symbolic = get_initialized_symbolic_system()
+    state = SimulationState(symbolic)
+    state.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    state.substitute(symbolic.getSymbolValuesDict())
+    old_charge = state.getOperator(1, "charge")
+
+    # An identical configuration leaves the existing operators untouched
+    state.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    assert state.getOperator(1, "charge") is old_charge
+
+    # A different truncation forces a new substitution
+    state.setNodeOperators(1, ChargeBasisOperators(1, 4))
+    assert state.getOperator(1, "charge").shape == (9, 9)
+
+
+def test_simulation_state_reconfiguration_before_substitution():
+    state = SimulationState(get_symbolic_system())
+    state.setNodeOperators(1, ChargeBasisOperators(1, 3))
+
+    # Reconfiguring before any substitution must not attempt one
+    state.setNodeOperators(1, ChargeBasisOperators(1, 4))
+    assert state.numerical_parts is None
+
+
+def test_numerical_system_reconfiguration_forces_substitution():
+    hamil = NumericalSystem(get_symbolic_system())
+    hamil.configureOperator(1, 40, "charge")
+    hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
+    assert hamil.getHilbertSpaceSize() == 81
+
+    # The Hamiltonian tracks the new truncation without a new parameter substitution
+    hamil.configureOperator(1, 20, "charge")
+    assert hamil.getHilbertSpaceSize() == 41
+    assert hamil.getHamiltonian().shape == (41, 41)
+
+
 def test_numerical_system_spectrum_unchanged():
     # Guard that the refactor does not alter numerical results
     hamil = NumericalSystem(get_symbolic_system())
