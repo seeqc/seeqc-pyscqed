@@ -1,6 +1,7 @@
 """ The :py:mod:`pycqed.src.parameters` module defines two classes :class:`Param` and :class:`ParamCollection` that are used to manipulate scalar parameters used in simulations and experiments.
 """
 import os
+from typing import Any, Callable, TypeAlias
 import numpy as np
 import sympy as sy
 import networkx as nx
@@ -15,6 +16,9 @@ if platform.system() == 'Windows':
 
 from . import text2latex as t2l
 from . import util
+
+_ParameterisationData: TypeAlias = dict[str, dict[str, Any]]
+_PCInternalData: TypeAlias = tuple[dict[str, "Param"], dict[str, sy.Symbol], _ParameterisationData, nx.DiGraph]
 
 class Param:
     """This class defines the properties of a parameter used in simulations and experiments. It supports upper and lower bounds and the generation of sweeps for scalars.
@@ -47,7 +51,13 @@ class Param:
     """
     __valid_scalar_types = [int, float, np.float64]
     
-    def __init__(self, name, value=None, bounds=[-np.inf, np.inf], unit_pref=1.0):
+    def __init__(
+        self,
+        name: str,
+        value: float | None = None,
+        bounds: list[float] = [-np.inf, np.inf],
+        unit_pref: float = 1.0
+    ) -> None:
         """Constructor method."""
         # Ensure name is a string and it has the correct format
         if type(name) is not str:
@@ -89,7 +99,7 @@ class Param:
         self.sweep = np.array([])
         self.N = 0
     
-    def getValue(self):
+    def getValue(self) -> float | None:
         """ Get the current value of the parameter.
         
         :return: The current value of the parameter.
@@ -97,7 +107,7 @@ class Param:
         """
         return self.__value
     
-    def setValue(self, value):
+    def setValue(self, value: float) -> None:
         """ Set the value of the parameter.
         
         :param value: The value to set the parameter to.
@@ -118,7 +128,7 @@ class Param:
             raise ValueError("Param %s 'value' exceeds specified lower bound." % (self.name))
         self.__value = float(value)
     
-    def getBounds(self):
+    def getBounds(self) -> list[float]:
         """ Get the bounds of the parameter.
         
         :return: The lower and upper bounds of the parameter.
@@ -126,7 +136,7 @@ class Param:
         """
         return [self.__lower_bound, self.__upper_bound]
     
-    def setBounds(self, bounds):
+    def setBounds(self, bounds: list[float]) -> None:
         """ Set the bounds of the parameter.
         
         :param bounds: The lower and upper bounds of the parameter.
@@ -151,7 +161,7 @@ class Param:
         self.__lower_bound = float(bounds[0])
         self.__upper_bound = float(bounds[1])
     
-    def linearSweep(self, start, end, N):
+    def linearSweep(self, start: float, end: float, N: int) -> np.ndarray:
         """ Generates a linear sweep using `numpy.linspace` with added bounds checking. The sweep is saved internally, and is overwritten by subsequent calls to this function.
         
         :param start: The initial value of the sweep.
@@ -216,7 +226,7 @@ class ParamCollection:
     
     """
     
-    def __init__(self, names):
+    def __init__(self, names: list[str]) -> None:
         self.__collection = {}
         self.__symbol_map = {}
         self.__parameterisation = {}
@@ -231,7 +241,7 @@ class ParamCollection:
     ###################################################################################################################
     
     # FIXME: Should be renamed to getParameterDict
-    def getParameterList(self):
+    def getParameterList(self) -> dict[str, Param]:
         """ Gets the parameter dictionary, mapping the utf name to the :class:`Param` instance.
         
         :return: A dictionary of param names to :class:`Param` instances.
@@ -240,7 +250,7 @@ class ParamCollection:
         return self.__collection
     
     # FIXME: Should be renamed to getSymbolDict
-    def getSymbolList(self):
+    def getSymbolList(self) -> dict[str, sy.Symbol]:
         """ Gets the symbol dictionary, mapping the utf name to the Param `sympy` symbol.
         
         :return: A dictionary of param names mapping to `sympy` symbols.
@@ -248,7 +258,7 @@ class ParamCollection:
         """
         return self.__symbol_map
     
-    def getSymbol(self, name):
+    def getSymbol(self, name: str) -> sy.Symbol:
         """ Gets the symbol associated with the parameter `name`.
         
         :param name: The name of the parameter.
@@ -263,7 +273,7 @@ class ParamCollection:
             raise TypeError("Parameter name %s is not a string." % repr(name))
         return self.__symbol_map[name]
     
-    def getParameterValuesDict(self):
+    def getParameterValuesDict(self) -> dict[str, float | None]:
         """ Returns a dictionary of all the current set values of the parameters in a dictionary format.
         
         :return: A dictionary of all param names to values.
@@ -271,7 +281,7 @@ class ParamCollection:
         """
         return {k: v.getValue() for k, v in self.__collection.items()}
     
-    def getSymbolValuesDict(self):
+    def getSymbolValuesDict(self) -> dict[sy.Symbol, float | None]:
         """ Returns a dictionary of all the current set values of the parameter symbols in a dictionary format.
         
         :return: A dictionary of all param symbols to values.
@@ -279,7 +289,7 @@ class ParamCollection:
         """
         return {self.__symbol_map[k]: v.getValue() for k, v in self.__collection.items()}
     
-    def addParameter(self, name, symbol_override=None):
+    def addParameter(self, name: str, symbol_override: sy.Symbol | None = None) -> None:
         """ Adds a new parameter to the collection if it does not already exist. If it does exist, nothing is reported.
         
         :param name: The name of the parameter to add.
@@ -306,7 +316,7 @@ class ParamCollection:
             self.__symbol_map[name] = self.__collection[name].symbol
             self.__parameterisation_graph.add_node(name)
     
-    def addParameters(self, *names):
+    def addParameters(self, *names: str) -> None:
         r""" Adds multiple new parameters to the collection if they do not already exist. If some or all exist, nothing is reported.
         
         :param \*name: Arguments list of parameter names to add.
@@ -317,7 +327,7 @@ class ParamCollection:
         for name in list(names):
             self.addParameter(name)
     
-    def rmParameter(self, name):
+    def rmParameter(self, name: str) -> None:
         """ Removes a parameter from the collection if it exists.
         
         :param name: The parameter to remove.
@@ -333,7 +343,7 @@ class ParamCollection:
             del self.__collection[name]
             del self.__symbol_map[name]
     
-    def getParameterNamesList(self):
+    def getParameterNamesList(self) -> list[str]:
         """ Gets the list of available parameter names in the collection.
         
         :return: The list of parameter names.
@@ -341,7 +351,7 @@ class ParamCollection:
         """
         return list(self.__collection.keys())
     
-    def getParameterSymbolsList(self):
+    def getParameterSymbolsList(self) -> list[sy.Symbol]:
         """ Gets the list of available parameter symbols in the collection.
         
         :return: The list of `sympy` symbols.
@@ -349,7 +359,7 @@ class ParamCollection:
         """
         return list(self.__symbol_map.values())
     
-    def getParameterFromSymbol(self, symbol):
+    def getParameterFromSymbol(self, symbol: sy.Symbol) -> str | None:
         """ Gets parameter string name associated with the provided `sympy.Symbol`.
         
         :raises Exception: If the symbol does not exist in the collection.
@@ -363,7 +373,7 @@ class ParamCollection:
             if symbol == v:
                 return k
     
-    def setParameterValue(self, name, value):
+    def setParameterValue(self, name: str, value: float) -> None:
         """ Set the value of a given parameter.
         
         :param name: The name of the parameter to set.
@@ -389,7 +399,7 @@ class ParamCollection:
         self.__collection[name].setValue(value)
         self.updateParameterisations()
     
-    def getParameterValue(self, name):
+    def getParameterValue(self, name: str) -> float | None:
         """ Get the value of a given parameter.
         
         :param name: The name of the parameter.
@@ -406,7 +416,7 @@ class ParamCollection:
         
         return self.__collection[name].getValue()
     
-    def getParameterSweep(self, name):
+    def getParameterSweep(self, name: str) -> np.ndarray:
         """ Get the parameter sweep associated with a parameter.
         
         :param name: The name of the parameter.
@@ -422,7 +432,7 @@ class ParamCollection:
             raise ValueError("'%s' parameter was not found." % name)
         return self.__collection[name].sweep
     
-    def getParameterLatexName(self, name):
+    def getParameterLatexName(self, name: str) -> str:
         """ Get the latex name of the parameter.
         
         :param name: The name of the parameter.
@@ -438,7 +448,7 @@ class ParamCollection:
             raise ValueError("'%s' parameter was not found." % name)
         return self.__collection[name].name_latex
     
-    def setParameterValues(self, *name_value_pairs):
+    def setParameterValues(self, *name_value_pairs: str | float | dict[str, float]) -> None:
         r""" Set many parameter values.
         
         :param \*name_value_pairs: Arguments list, formatted as the parameter name followed by its value, or optionally passed as a dictionary.
@@ -479,7 +489,7 @@ class ParamCollection:
             self.__collection[name].setValue(values[i])
         self.updateParameterisations()
     
-    def getParameterValues(self, *names):
+    def getParameterValues(self, *names: str) -> dict[str, float | None]:
         r""" Get the values of many parameters as a dictionary.
         
         :param \*names: Arguments list, formatted as the parameter names.
@@ -498,7 +508,7 @@ class ParamCollection:
             values[name] = self.__collection[name].getValue()
         return values
     
-    def getSymbolValues(self, *names):
+    def getSymbolValues(self, *names: str) -> dict[sy.Symbol, float | None]:
         r""" Get the values of many parameters keyed by symbol. Useful for getting a substitution dict of a selection of parameters.
         
         :param \*names: Arguments list, formatted as the parameter names.
@@ -517,7 +527,7 @@ class ParamCollection:
             values[self.__symbol_map[name]] = self.__collection[name].getValue()
         return values
     
-    def allParametersSet(self):
+    def allParametersSet(self) -> bool:
         """ Checks if all the parameters in the collection have been initialised.
         
         :return: True if all parameters have been initialised else False
@@ -531,7 +541,7 @@ class ParamCollection:
     #       Parameterisations
     ###################################################################################################################
     
-    def getSymbols(self, *names, symbol_overrides=None):
+    def getSymbols(self, *names: str, symbol_overrides: list[sy.Symbol | None] | None = None) -> dict[str, sy.Symbol]:
         r""" Generates a set of `sympy` symbols for use in parameterisation. They are added as independent Param instances.
         The symbols are returned in a dictionary so that they can be used to create expressions.
         
@@ -556,7 +566,7 @@ class ParamCollection:
             values[name] = self.__symbol_map[name]
         return values
     
-    def getParametricParametersList(self):
+    def getParametricParametersList(self) -> list[str]:
         """ Get the list of parameters that have a parametric expression.
         
         :return: A list of parameter names.
@@ -564,7 +574,7 @@ class ParamCollection:
         """
         return list(self.__parameterisation.keys())
 
-    def addParameterisation(self, name, expression):
+    def addParameterisation(self, name: str, expression: sy.Expr) -> None:
         """ Registers a parameterisation of the parameter `name` in terms of symbols returned by :func:`getSymbols`. It is allowed to use `sympy` functions such as `sympy.cos` in expressions, and also any previously defined parameters. If the parameterisation already exists, it is overwritten.
 
         :param name: The name of the parameter that is being parameterised.
@@ -606,7 +616,7 @@ class ParamCollection:
         }
         self.__parameterisation_graph = graph
 
-    def addParameterisationPrefactor(self, name, prefactor):
+    def addParameterisationPrefactor(self, name: str, prefactor: sy.Expr | float) -> None:
         """ Add a prefactor to a parameterisation expression. This is mechanism for implementing unit conversion between parameters if required.
         
         :param name: The name of the parametric parameter.
@@ -624,7 +634,7 @@ class ParamCollection:
             raise ValueError("'%s' parameter is not parameterised." % name)
         self.__parameterisation[name]["expression"] *= prefactor
     
-    def getParametricExpression(self, name, expand=False):
+    def getParametricExpression(self, name: str, expand: bool = False) -> sy.Expr:
         """ Gets the `sympy` expression of parameter `name`.
         
         :param name: The name of the parameter.
@@ -643,7 +653,7 @@ class ParamCollection:
         if not expand:
             return self.__parameterisation[name]["expression"]
         
-        def exprParametric(expr):
+        def exprParametric(expr: sy.Expr) -> bool:
             pp = self.getParametricParametersList()
             for sym in list(expr.free_symbols):
                 p = self.getParameterFromSymbol(sym)
@@ -666,7 +676,7 @@ class ParamCollection:
             base = expr
         return base
     
-    def getParameterisationParameters(self, name):
+    def getParameterisationParameters(self, name: str) -> list[str]:
         """ Gets the parameters that form the parametric expression of parameter `name`.
         
         :param name: The name of the parameter.
@@ -682,7 +692,7 @@ class ParamCollection:
         
         return self.__parameterisation[name]["parameters"]
     
-    def rmParameterisation(self, name):
+    def rmParameterisation(self, name: str) -> None:
         """ Unregisters the parameterisation of parameter `name`.
         
         :param name: The name of the parameter that is being parameterised.
@@ -708,7 +718,7 @@ class ParamCollection:
             self.__parameterisation_graph.remove_edge(pname, name)
         del self.__parameterisation[name]
     
-    def parameterisationParametersSet(self, name):
+    def parameterisationParametersSet(self, name: str) -> bool:
         """ Checks if the parameters that parameterise `name` have been initialised.
         
         :param name: The name of the parameterised parameter.
@@ -727,7 +737,7 @@ class ParamCollection:
             return False
         return True
     
-    def getParameterisationsInvolving(self, *names):
+    def getParameterisationsInvolving(self, *names: str) -> list[str]:
         r""" Gets the list of parametric parameters that depend on the supplied parameter names. Returning an empty list if `name` is parametric parameter or doesn't exist in any parametric expressions.
         
         :param \*names: The names of the parameters.
@@ -756,7 +766,7 @@ class ParamCollection:
     def getParameterisationSuccessors(self, name: str) -> dict[sy.Symbol, str]:
         return nx.dfs_successors(self.__parameterisation_graph, name)
     
-    def drawParameterisationGraph(self, filename=None):
+    def drawParameterisationGraph(self, filename: str | None = None) -> gv.Source:
         # Get the pydot graph
         pd_graph = nx.nx_pydot.to_pydot(self.__parameterisation_graph)
         
@@ -771,7 +781,7 @@ class ParamCollection:
     #       Parameter Sweeping Functions
     ###################################################################################################################
     
-    def paramSweepSpec(self, name, *sweep_params):
+    def paramSweepSpec(self, name: str, *sweep_params: float | int) -> dict[str, Any]:
         r""" Convenience method to generate a sweep specification for use with :func:`ndSweep`.
         
         :param name: The name of the parameter to sweep.
@@ -801,7 +811,7 @@ class ParamCollection:
             "N": swp[2]
         }
     
-    def ndSweep(self, spec):
+    def ndSweep(self, spec: list[dict[str, Any]]) -> None:
         """ Generates a single or multidimensional sweep of parameters in such a way that only a single for loop is required to apply the parameters.
         
         :param spec: An array of parameter sweep specifications, optionally created by :func:`paramSweepSpec`.
@@ -888,7 +898,7 @@ class ParamCollection:
             if i == 0:
                 self.sweep_grid_c_len = len(self.sweep_grid_c[k])
     
-    def getSweepParametersDict(self):
+    def getSweepParametersDict(self) -> dict[sy.Symbol, float | None]:
         """ Gets the list of parameters that will be swept, and substituted into the circuit equations during the evaluation loop.
         
         :return: A list of parameter names.
@@ -908,7 +918,7 @@ class ParamCollection:
         actual_sub_names = list(not_for_presub)
         return self.getSymbolValues(*actual_sub_names)
     
-    def getNonSweepParametersDict(self):
+    def getNonSweepParametersDict(self) -> dict[sy.Symbol, float | None]:
         """ Gets the symbol-value dictionary of parameters that will NOT be swept, and substituted into the circuit equations before the evaluation loop.
         
         :return: A dictionary of symbol value pairs.
@@ -929,7 +939,7 @@ class ParamCollection:
         non_sweep = list(set(self.__collection.keys()) - not_for_presub)
         return self.getSymbolValues(*non_sweep)
     
-    def collapsedIndices(self, *indices):
+    def collapsedIndices(self, *indices: int) -> int:
         r""" Computes the indices of the collapsed array for corresponding indices of the non-collapsed array. Should not be used by the user. Will be hidden in the future.
         
         :param \*indices: Indices of the single parameter sweeps.
@@ -946,7 +956,7 @@ class ParamCollection:
         # Convert indices to collapsed format
         return sum([int(np.prod(Narr[i+1:]))*index for i, index in enumerate(list(indices))])
     
-    def computeFuncSweep(self, func, spec, *fcn_args, **fcn_kwargs):
+    def computeFuncSweep(self, func: Callable, spec: list[dict[str, Any]], *fcn_args: Any, **fcn_kwargs: Any) -> None:
         r""" Compute a function over a sweep. Uses the collapsed grid created by :func:`ndSweep` internally.
         
         :param func: Function reference to compute over the sweep
@@ -982,7 +992,15 @@ class ParamCollection:
     # @param spec The specification generated by \ref paramSweepSpec.
     # @return None.
     #
-    def computeExprSweep(self, cobj, paramcb, exprcb, spec, *expr_args, **expr_kwargs):
+    def computeExprSweep(
+        self,
+        cobj: Any,
+        paramcb: str,
+        exprcb: str,
+        spec: list[dict[str, Any]],
+        *expr_args: Any,
+        **expr_kwargs: Any
+    ) -> None:
         """ Compute an expression over sweep. Use this to avoid regenerating sympy expressions.
         """
         # Generate sweep matrix
@@ -1002,7 +1020,13 @@ class ParamCollection:
             subs = dict([(syparams[p],params[p]) for p in self.sweep_grid_params])
             self.sweep_grid_result.append(expr.subs(subs))
         
-    def getSweepResult(self, ind_var, static_vars, data=None, key=None):
+    def getSweepResult(
+        self,
+        ind_var: str | list[str],
+        static_vars: dict[str, float],
+        data: list | np.ndarray | dict | None = None,
+        key: str | None = None
+    ) -> tuple[np.ndarray | list[np.ndarray], np.ndarray, dict[str, float]]:
         """ Get the result of a sweep as a function of one or more independent variables.
         
         :param ind_var: The parameter name that is swept. This is the independent variable. If more than one independent variable are specified, the order in which they appear does not affect the returned result.
@@ -1172,7 +1196,7 @@ class ParamCollection:
     #       Internal
     ###################################################################################################################
     
-    def _get_pc_internal_data(self):
+    def _get_pc_internal_data(self) -> _PCInternalData:
         return (
             self.__collection,
             self.__symbol_map,
@@ -1180,14 +1204,14 @@ class ParamCollection:
             self.__parameterisation_graph
         )
     
-    def _set_pc_internal_data(self, data):
+    def _set_pc_internal_data(self, data: _PCInternalData) -> None:
         self.__collection = data[0]
         self.__symbol_map = data[1]
         self.__parameterisation = data[2]
         self.__parameterisation_graph = data[3]
     
     # Use this with care, probably many scenarios where it would break things
-    def _update_pc_internal_data(self, data):
+    def _update_pc_internal_data(self, data: _PCInternalData) -> None:
         # Update the collection
         for param in data[0].keys():
             if param not in self.__collection.keys():
@@ -1207,7 +1231,7 @@ class ParamCollection:
         self.__parameterisation = data[2]
         self.__parameterisation_graph = data[3]
     
-    def updateParameterisations(self):
+    def updateParameterisations(self) -> None:
         """ Recomputes the values of all parameterised parameters from the currently set
         independent parameter values. Called automatically when parameter values are set;
         call it directly after registering a new parameterisation to make its value
