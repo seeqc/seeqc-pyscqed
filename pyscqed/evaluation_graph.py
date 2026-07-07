@@ -10,7 +10,7 @@ NodeIOData: TypeAlias = dict[str, dict[str, Any]]
 
 def _define_outputs(fn: Callable, keys: list[str]) -> Callable:
     """Decorator that maps function outputs to user defined keys."""
-    def inner(*args, **kwargs) -> dict[str, Any]:
+    def inner(*args: Any, **kwargs: Any) -> dict[str, Any]:
         outputs = fn(*args, **kwargs)
         if not isinstance(outputs, tuple):
             if len(keys) != 1:
@@ -27,13 +27,13 @@ def _define_outputs(fn: Callable, keys: list[str]) -> Callable:
 
 
 class EvaluationGraph:
-    def __init__(self):
+    def __init__(self) -> None:
         self._graph = nx.DiGraph()
         self._silent_nodes: set[str] = set()
         self._output_keys: dict[str, list[str]] = {}
         self._static_inputs: NodeIOData = {}
 
-    def addNode(self, name: str, fn: Callable, outputs: list[str], static_inputs: dict[str, Any] | None = None):
+    def addNode(self, name: str, fn: Callable, outputs: list[str], static_inputs: dict[str, Any] | None = None) -> None:
         self._graph.add_node(name, node_fn=fn, node_outputs=outputs)
         for output in outputs:
             if name not in self._output_keys:
@@ -45,7 +45,7 @@ class EvaluationGraph:
         if static_inputs is not None:
             self._static_inputs[name] = static_inputs
 
-    def addDependency(self, source_node: str, target_node: str, preserve_source_outputs: bool = False):
+    def addDependency(self, source_node: str, target_node: str, preserve_source_outputs: bool = False) -> None:
         if source_node not in self._graph:
             raise ValueError(f"{source_node} source node does not exist.")
         if target_node not in self._graph:
