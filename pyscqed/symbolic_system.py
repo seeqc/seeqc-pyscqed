@@ -863,18 +863,3 @@ class SymbolicSystem(ParamCollection):
                     self.coordinate_modes[self.nodes[index]] = "oscillator"
                 ch_indices.add(index)
                 index += 1
-                
-
-
-
-
-
-
-
-
-
-
-
-
-
-
