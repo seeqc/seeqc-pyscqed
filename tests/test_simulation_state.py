@@ -81,12 +81,12 @@ def test_numerical_system_holds_symbolic_parts():
     assert isinstance(hamil._symbolic_parts, _SymbolicParts)
 
 
-def test_numerical_system_refreshes_symbolic_parts():
+def test_numerical_system_initializes_state_containers_in_constructor():
     hamil = NumericalSystem(get_symbolic_system())
-    old_parts = hamil._symbolic_parts
-    hamil.getSymbolicExpressions()
+    assert isinstance(hamil.circuit_operators, CircuitOperators)
     assert isinstance(hamil._symbolic_parts, _SymbolicParts)
-    assert hamil._symbolic_parts is not old_parts
+    assert hamil._mixed_parts is None
+    assert hamil._numerical_parts is None
 
 
 def test_numerical_system_spectrum_unchanged():

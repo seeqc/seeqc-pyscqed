@@ -59,19 +59,20 @@ class NumericalSystem(TempData):
         # Assign the circuit
         self.SS = symbolic_system
 
-        # Manager for the DoF operator generators and their expanded representations
+        # Containers of derived circuit state, initialised together so the full
+        # set of attributes is visible at construction time
         self.circuit_operators = CircuitOperators(symbolic_system.nodes)
-        
+        self._symbolic_parts = _SymbolicParts(self.SS)
+        self._mixed_parts: _MixedParts | None = None
+        self._numerical_parts: _NumericalParts | None = None
+
         # Set the unit system
         self.units = unit
         self._set_parameter_units()
-        
+
         # Load default diagonaliser configuration
         self.setDiagConfig()
-        
-        # Load the symbolic expressions
-        self.getSymbolicExpressions()
-    
+
     def getNodeList(self):
         return self.SS.nodes
     
@@ -159,11 +160,6 @@ class NumericalSystem(TempData):
     ###################################################################################################################
     #       Hamiltonian Building Functions
     ###################################################################################################################
-    
-    def getSymbolicExpressions(self):
-        """ Collects the symbolic expressions required to build the numerical Hamiltonian
-        into a :class:`~pyscqed.simulation_state._SymbolicParts` instance. """
-        self._symbolic_parts = _SymbolicParts(self.SS)
     
     def prepareOperators(self):
         self.circuit_operators.generateExpandedOperators()
