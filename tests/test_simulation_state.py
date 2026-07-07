@@ -1,6 +1,7 @@
 import pytest
 
 import numpy as np
+import qutip as qt
 
 from pyscqed.circuit_graph import CircuitGraph
 from pyscqed.symbolic_system import SymbolicSystem
@@ -253,6 +254,13 @@ def test_circuit_operators_expansion_multiple_nodes():
     # Operators are expanded into the total Hilbert space of dimension 7 * 5
     assert ops[1]["charge"].shape == (35, 35)
     assert ops[2]["charge"].shape == (35, 35)
+
+    # Operators acting on different nodes commute
+    keys = ["charge", "flux", "disp", "disp_adj"]
+    for key1 in keys:
+        for key2 in keys:
+            commutator = qt.commutator(ops[1][key1], ops[2][key2])
+            assert commutator.norm() == pytest.approx(0.0)
 
 
 def test_circuit_operators_rejects_invalid_node_operators():
