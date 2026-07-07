@@ -8,6 +8,7 @@ from pyscqed.symbolic_system import SymbolicSystem
 from pyscqed.operators import ChargeBasisOperators, OscillatorBasisOperators
 from pyscqed.simulation_state import (
     CircuitOperators,
+    SimulationState,
     _MixedParts,
     _NumericalParts,
     _SymbolicParts,
@@ -76,17 +77,68 @@ def test_simulation_state_rejects_non_symbolic_system():
         _SymbolicParts(None)
 
 
-def test_numerical_system_holds_symbolic_parts():
+def test_numerical_system_holds_simulation_state():
     hamil = NumericalSystem(get_symbolic_system())
-    assert isinstance(hamil._symbolic_parts, _SymbolicParts)
+    assert isinstance(hamil.state, SimulationState)
 
 
-def test_numerical_system_initializes_state_containers_in_constructor():
+def test_simulation_state_initializes_containers_in_constructor():
+    state = SimulationState(get_symbolic_system())
+    assert isinstance(state.circuit_operators, CircuitOperators)
+    assert isinstance(state.symbolic_parts, _SymbolicParts)
+    assert state.mixed_parts is None
+    assert state.numerical_parts is None
+
+
+def test_simulation_state_rejects_non_symbolic_system():
+    with pytest.raises(TypeError):
+        SimulationState(get_single_node_graph())
+
+    with pytest.raises(TypeError):
+        SimulationState(None)
+
+
+def test_simulation_state_get_operator():
+    state = SimulationState(get_symbolic_system())
+    state.circuit_operators.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    state.circuit_operators.generateExpandedOperators()
+    for kind in ("charge", "flux", "disp", "disp_adj"):
+        assert state.getOperator(1, kind) is state.circuit_operators[1][kind]
+
+
+def test_simulation_state_substitutions():
+    symbolic = get_initialized_symbolic_system()
+    subs = symbolic.getSymbolValuesDict()
+    state = SimulationState(symbolic)
+    state.circuit_operators.setNodeOperators(1, ChargeBasisOperators(1, 3))
+
+    # substitute() also generates the expanded node operators
+    state.substitute(subs)
+    assert isinstance(state.numerical_parts, _NumericalParts)
+    assert isinstance(state.getOperator(1, "charge"), qt.Qobj)
+
+    C = symbolic.getSymbol("C")
+    state.substituteStatic({C: subs[C]})
+    assert isinstance(state.mixed_parts, _MixedParts)
+
+    state.substituteSwept({k: v for k, v in subs.items() if k != C})
+    assert isinstance(state.numerical_parts, _NumericalParts)
+
+
+def test_simulation_state_hilbert_space_size():
+    state = SimulationState(get_symbolic_system())
+    state.circuit_operators.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    assert state.getHilbertSpaceSize() == 7
+
     hamil = NumericalSystem(get_symbolic_system())
-    assert isinstance(hamil.circuit_operators, CircuitOperators)
-    assert isinstance(hamil._symbolic_parts, _SymbolicParts)
-    assert hamil._mixed_parts is None
-    assert hamil._numerical_parts is None
+    hamil.configureOperator(1, 3, "charge")
+    assert hamil.getHilbertSpaceSize() == 7
+
+
+def test_simulation_state_sparsity():
+    state = SimulationState(get_symbolic_system())
+    state.circuit_operators.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    assert state.sparsity(qt.qeye(7)) == pytest.approx(1 - 1/7)
 
 
 def test_numerical_system_spectrum_unchanged():
@@ -94,8 +146,6 @@ def test_numerical_system_spectrum_unchanged():
     hamil = NumericalSystem(get_symbolic_system())
     hamil.configureOperator(1, 40, "charge")
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
-    hamil.substitute()
-    hamil.prepareOperators()
     H = hamil.getHamiltonian()
     energies, _ = hamil.diagonalize(H)
     expected = [59.95010688, 219.58210001, 379.20831265, 538.82879099, 698.44358094]
@@ -202,14 +252,14 @@ def test_numerical_system_substitute_populates_numerical_parts():
     hamil.configureOperator(1, 40, "charge")
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
     hamil.substitute()
-    assert isinstance(hamil._numerical_parts, _NumericalParts)
+    assert isinstance(hamil.state.numerical_parts, _NumericalParts)
 
 
 def test_sweep_does_not_regenerate_charge_basis_operators():
     hamil = NumericalSystem(get_symbolic_system())
     hamil.configureOperator(1, 40, "charge")
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
-    old_charge = hamil.circ_operators[1]["charge"]
+    old_charge = hamil.getOperator(1, "charge")
 
     sweep = hamil.newSweepConfig()
     sweep.add("C", np.linspace(20.0, 40.0, 2))
@@ -217,15 +267,15 @@ def test_sweep_does_not_regenerate_charge_basis_operators():
 
     # Charge basis operators do not depend on the swept parameter, so no
     # regeneration is scheduled and the operators are untouched
-    assert hamil.circ_operators[1]["charge"] is old_charge
-    assert hamil.circuit_operators.charge_op_vector[0, 0] is old_charge
+    assert hamil.getOperator(1, "charge") is old_charge
+    assert hamil.state.circuit_operators.charge_op_vector[0, 0] is old_charge
 
 
 def test_sweep_regenerates_oscillator_basis_operators():
     hamil = NumericalSystem(get_symbolic_system())
     hamil.configureOperator(1, 40, "oscillator")
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
-    old_charge = hamil.circ_operators[1]["charge"]
+    old_charge = hamil.getOperator(1, "charge")
 
     sweep = hamil.newSweepConfig()
     sweep.add("C", np.linspace(20.0, 40.0, 2))
@@ -233,18 +283,19 @@ def test_sweep_regenerates_oscillator_basis_operators():
 
     # The oscillator impedance depends on the swept parameter, so regeneration
     # is scheduled and the operator vectors must track the new operators
-    assert hamil.circ_operators[1]["charge"] is not old_charge
-    assert hamil.circuit_operators.charge_op_vector[0, 0] is \
-        hamil.circ_operators[1]["charge"]
+    assert hamil.getOperator(1, "charge") is not old_charge
+    assert hamil.state.circuit_operators.charge_op_vector[0, 0] is \
+        hamil.getOperator(1, "charge")
 
 
 def test_circuit_operators_expansion():
     ops = CircuitOperators([1])
-    ops.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    node_ops = ChargeBasisOperators(1, 3)
+    ops.setNodeOperators(1, node_ops)
     ops.generateExpandedOperators()
 
-    assert set(ops.circ_operators[1].keys()) == {"charge", "flux", "disp", "disp_adj"}
-    assert ops[1] is ops.circ_operators[1]
+    assert ops.getNodeOperators(1) is node_ops
+    assert set(ops[1].keys()) == {"charge", "flux", "disp", "disp_adj"}
     assert ops[1]["charge"].shape == (7, 7)
 
     # The operator vectors collect the expanded operators
@@ -310,10 +361,12 @@ def test_circuit_operators_regenerates_dependent_nodes():
 
 def test_numerical_system_holds_circuit_operators():
     hamil = NumericalSystem(get_symbolic_system())
-    assert isinstance(hamil.circuit_operators, CircuitOperators)
+    assert isinstance(hamil.state.circuit_operators, CircuitOperators)
 
     hamil.configureOperator(1, 40, "charge")
-    assert isinstance(hamil.operator_data[1], ChargeBasisOperators)
+    assert isinstance(
+        hamil.state.circuit_operators.getNodeOperators(1), ChargeBasisOperators)
 
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
-    assert set(hamil.circ_operators[1].keys()) == {"charge", "flux", "disp", "disp_adj"}
+    for kind in ("charge", "flux", "disp", "disp_adj"):
+        assert isinstance(hamil.getOperator(1, kind), qt.Qobj)

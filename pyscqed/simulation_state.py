@@ -1,9 +1,10 @@
-"""Internal containers holding derived state used by the numerical simulation."""
+"""Containers and manager for the derived state used by the numerical simulation."""
 import numpy as np
 import qutip as qt
 
 from .operators import NodeOperators
 from .symbolic_system import SymbolicSystem
+from . import physical_constants as pc
 
 
 class _SymbolicPartsBase:
@@ -112,14 +113,26 @@ class CircuitOperators:
 
     def __init__(self, node_list):
         self._node_list = list(node_list)
-        self.operator_data = {}
-        self.circ_operators = {}
+        self._operator_data = {}
+        self._circ_operators = {}
         self.charge_op_vector = None
         self.flux_op_vector = None
 
     def __getitem__(self, node):
         """ Returns the expanded operator dictionary of the given node. """
-        return self.circ_operators[node]
+        return self._circ_operators[node]
+
+    def getNodeOperators(self, node):
+        """ Returns the operator generator of the given node. """
+        return self._operator_data[node]
+
+    def getHilbertSpaceSize(self):
+        """ Returns the total Hilbert space size considering the operator truncations of
+        all nodes. """
+        ret = 1
+        for ops in self._operator_data.values():
+            ret *= ops.dimension
+        return ret
 
     def setNodeOperators(self, node, node_operators: NodeOperators):
         """ Assigns the operator generator for the given node.
@@ -132,20 +145,20 @@ class CircuitOperators:
                 "node_operators must be a NodeOperators instance, got '%s'."
                 % type(node_operators).__name__
             )
-        self.operator_data[node] = node_operators
+        self._operator_data[node] = node_operators
 
     def generateExpandedOperators(self, nodes=None):
         """ Generates the operators of each node (all if ``nodes`` is None) and expands them
         into the total Hilbert space. """
         # Generate the Hilbert space expanders
-        Ilist = [self.operator_data[node].getIdentity() for node in self._node_list]
+        Ilist = [self._operator_data[node].getIdentity() for node in self._node_list]
 
         for i, node in enumerate(self._node_list):
             # Ignore nodes that are not in the list, if provided
             if nodes is not None and node not in nodes:
                 continue
 
-            ops = self.operator_data[node]
+            ops = self._operator_data[node]
             ops.generate()
 
             Olist = list(Ilist)
@@ -158,7 +171,7 @@ class CircuitOperators:
             op_dict["disp"] = qt.tensor(Olist)
             Olist[i] = ops.Ddag
             op_dict["disp_adj"] = qt.tensor(Olist)
-            self.circ_operators[node] = op_dict
+            self._circ_operators[node] = op_dict
 
         # Collect the operator vectors in node order
         self.charge_op_vector = self._collect_operator_vector("charge")
@@ -167,7 +180,7 @@ class CircuitOperators:
     def _collect_operator_vector(self, key):
         vector = np.empty((len(self._node_list), 1), dtype=object)
         for i, node in enumerate(self._node_list):
-            vector[i, 0] = self.circ_operators[node][key]
+            vector[i, 0] = self._circ_operators[node][key]
         return vector
 
     def regenerateDependentOperators(self, symbols):
@@ -175,8 +188,90 @@ class CircuitOperators:
         the given symbols. """
         symbols = set(symbols)
         nodes = [
-            node for node, ops in self.operator_data.items()
+            node for node, ops in self._operator_data.items()
             if ops.dependsOnSymbols(symbols)
         ]
         if nodes:
             self.generateExpandedOperators(nodes)
+
+
+class SimulationState:
+    """Manages the derived state used by a numerical simulation: the node operators
+    expanded into the circuit Hilbert space, and the symbolic, partially substituted
+    and fully numerical Hamiltonian parts.
+
+    :raises TypeError: if ``symbolic_system`` is not a
+        :class:`~pyscqed.symbolic_system.SymbolicSystem` instance.
+    """
+
+    def __init__(self, symbolic_system: SymbolicSystem):
+        if not isinstance(symbolic_system, SymbolicSystem):
+            raise TypeError(
+                "symbolic_system must be a SymbolicSystem instance, got '%s'."
+                % type(symbolic_system).__name__
+            )
+        self._symbolic_system = symbolic_system
+        self.circuit_operators = CircuitOperators(symbolic_system.nodes)
+        self.symbolic_parts = _SymbolicParts(symbolic_system)
+        self.mixed_parts: _MixedParts | None = None
+        self.numerical_parts: _NumericalParts | None = None
+
+    def getOperator(self, node, kind):
+        """ Returns the operator ``kind`` of the given node, expanded into the circuit
+        Hilbert space.
+
+        :param kind: one of ``"charge"``, ``"flux"``, ``"disp"`` or ``"disp_adj"``.
+        """
+        return self.circuit_operators[node][kind]
+
+    def getHilbertSpaceSize(self):
+        """ Returns the total Hilbert space size considering all currently defined
+        operator truncations. """
+        return self.circuit_operators.getHilbertSpaceSize()
+
+    def sparsity(self, op):
+        """ Returns the sparsity of the given operator relative to the total Hilbert
+        space size. """
+        return 1 - op.to("CSR").data.as_scipy().nnz/self.getHilbertSpaceSize()**2
+
+    def getCommutator(self, Q, P, basis="charge"):
+        """ Returns the corrected commutator of the given conjugate operator pair.
+
+        :param basis: the basis representation of the operators, ``"charge"`` or
+            ``"oscillator"``.
+        """
+        if basis == "charge": # Need to figure out the correction for this case
+            dims = 2*pc.e*pc.phi0/pc.hbar
+            return qt.commutator(P, Q)*dims
+        elif basis == "oscillator":
+
+            # Get highest number operator eigenvalue and associated eigenstate
+            enum = Q.shape[0]
+            vnum = qt.basis(enum, enum-1)
+
+            # Create the correction matrix
+            mat = 1 - (enum)*vnum*vnum.dag()
+
+            # Invert it
+            corrmat = qt.Qobj(np.linalg.inv(mat.data.to_array()))
+
+            # Get the correct commutator
+            return qt.commutator(P, Q)*corrmat
+
+    def substitute(self, substitutions):
+        """ Substitutes all parameter values into the symbolic expressions, populating
+        :attr:`numerical_parts`, and generates the expanded node operators. """
+        self.numerical_parts = _NumericalParts(self.symbolic_parts, substitutions)
+        self.circuit_operators.generateExpandedOperators()
+
+    def substituteStatic(self, substitutions):
+        """ Substitutes the static parameters of a sweep, leaving the swept symbols
+        free and populating :attr:`mixed_parts`. """
+        self.mixed_parts = _MixedParts(self._symbolic_system, substitutions)
+
+    def substituteSwept(self, substitutions):
+        """ Substitutes the swept parameter values at the current sweep point,
+        populating :attr:`numerical_parts` and regenerating the operators that depend
+        on the swept symbols. """
+        self.numerical_parts = _NumericalParts(self.mixed_parts, substitutions)
+        self.circuit_operators.regenerateDependentOperators(substitutions)

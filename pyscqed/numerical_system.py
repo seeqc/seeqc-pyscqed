@@ -10,12 +10,11 @@ import time
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
 from .operators import ChargeBasisOperators, OscillatorBasisOperators, _qobj_atol
-from .simulation_state import CircuitOperators, _MixedParts, _NumericalParts, _SymbolicParts
+from .simulation_state import SimulationState
 from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk, SweepResultFromMemory
 from .evaluation_graph import EvaluationGraph
 from .result import EigenvalueResult, EigenvectorResult, FunctionResult
 from .units import Units
-from . import physical_constants as pc
 from . import util
 from . import units
 
@@ -59,12 +58,8 @@ class NumericalSystem(TempData):
         # Assign the circuit
         self.SS = symbolic_system
 
-        # Containers of derived circuit state, initialised together so the full
-        # set of attributes is visible at construction time
-        self.circuit_operators = CircuitOperators(symbolic_system.nodes)
-        self._symbolic_parts = _SymbolicParts(self.SS)
-        self._mixed_parts: _MixedParts | None = None
-        self._numerical_parts: _NumericalParts | None = None
+        # Manager for the derived circuit state
+        self.state = SimulationState(symbolic_system)
 
         # Set the unit system
         self.units = unit
@@ -91,78 +86,39 @@ class NumericalSystem(TempData):
     def getSymbolicSystem(self):
         return self.SS
 
-    @property
-    def operator_data(self):
-        """ The node operator generators, keyed by node. """
-        return self.circuit_operators.operator_data
+    def getOperator(self, node, kind):
+        """ Returns the operator ``kind`` of the given node, expanded into the circuit
+        Hilbert space.
 
-    @property
-    def circ_operators(self):
-        """ The expanded node operators, keyed by node. """
-        return self.circuit_operators.circ_operators
-
-    ## Get Hilbert space size
-    def getHilbertSpaceSize(self):
-        """ Returns the Hilbert space size considering all currently defined operator truncations.
-        
-        :return: The Hilbert space size
-        :rtype: int
+        :param kind: one of ``"charge"``, ``"flux"``, ``"disp"`` or ``"disp_adj"``.
         """
-        ret = 1
-        for v in self.operator_data.values():
-            ret *= v.dimension
-        return ret
-    
+        return self.state.getOperator(node, kind)
+
+    def getHilbertSpaceSize(self):
+        """ Returns the Hilbert space size considering all currently defined operator
+        truncations. """
+        return self.state.getHilbertSpaceSize()
+
     def sparsity(self, op):
-        return 1 - op.to("CSR").data.as_scipy().nnz/self.getHilbertSpaceSize()**2
+        """ Returns the sparsity of the given operator relative to the total Hilbert
+        space size. """
+        return self.state.sparsity(op)
     
     ###################################################################################################################
     #       Operator Generation and Functions
     ###################################################################################################################
         
-    def getCommutator(self, Q, P, basis="charge"):
-        if basis == "charge": # Need to figure out the correction for this case
-            dims = 2*pc.e*pc.phi0/pc.hbar
-            return qt.commutator(P, Q)*dims
-        elif basis == "oscillator":
-            
-            # Get highest number operator eigenvalue and associated eigenstate
-            enum = Q.shape[0]
-            vnum = qt.basis(enum, enum-1)
-            
-            # Create the correction matrix
-            mat = 1 - (enum)*vnum*vnum.dag()
-            
-            # Invert it
-            corrmat = qt.Qobj(np.linalg.inv(mat.data.to_array()))
-            
-            # Get the correct commutator
-            return qt.commutator(P, Q)*corrmat
-    
     def configureOperator(self, node, trunc, basis):
         if node not in self.getNodeList():
             raise Exception("Node '%i' is not a valid circuit node." % node)
         if basis == "charge":
-            self.circuit_operators.setNodeOperators(node, ChargeBasisOperators(node, trunc))
+            self.state.circuit_operators.setNodeOperators(node, ChargeBasisOperators(node, trunc))
         elif basis == "oscillator":
-            self.circuit_operators.setNodeOperators(
+            self.state.circuit_operators.setNodeOperators(
                 node, OscillatorBasisOperators(node, trunc, self.SS, self.units)
             )
         else:
             raise Exception("Unrecognized basis representation '%s'." % repr(basis))
-
-    def getOperatorList(self, node):
-        # FIXME: Determine if we need to generate all the operators for this node
-        ops = self.operator_data[node]
-        ops.generate()
-        return ops.Q, ops.P, ops.D, ops.Ddag
-    
-    ###################################################################################################################
-    #       Hamiltonian Building Functions
-    ###################################################################################################################
-    
-    def prepareOperators(self):
-        self.circuit_operators.generateExpandedOperators()
 
     ###################################################################################################################
     #       Analysis Support
@@ -179,15 +135,13 @@ class NumericalSystem(TempData):
     def substitute(self):
         """ Substitutes all current parameter values into the symbolic expressions, collecting
         the numerical arrays into a :class:`~pyscqed.simulation_state._NumericalParts`
-        instance. """
-        self._numerical_parts = _NumericalParts(
-            self._symbolic_parts, self.SS.getSymbolValuesDict()
-        )
+        instance, and generates the expanded node operators. """
+        self.state.substitute(self.SS.getSymbolValuesDict())
     
     def getLinearPart(self):
-        parts = self._numerical_parts
-        Q = self.circuit_operators.charge_op_vector + parts.charge_bias_vector
-        P = self.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
+        parts = self.state.numerical_parts
+        Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
+        P = self.state.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
 
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
@@ -200,7 +154,7 @@ class NumericalSystem(TempData):
         return Hq + Hf
     
     def getStaticJosephsonPart(self):
-        Jvec = self._numerical_parts.josephson_vector
+        Jvec = self.state.numerical_parts.josephson_vector
 
         # Need the branch DoFs in the possibly transformed representation
         Pp = self.SS.Rnb*self.SS.Rinv*self.SS.node_vector
@@ -220,27 +174,27 @@ class NumericalSystem(TempData):
                 for arg in Pp[i].args:
                     node = self.SS.node_map_rev[arg.args[1]]
                     if arg.args[0] > 0:
-                        prod1 *= self.circ_operators[node]["disp"]
+                        prod1 *= self.getOperator(node, "disp")
                     else:
-                        prod1 *= self.circ_operators[node]["disp_adj"]
+                        prod1 *= self.getOperator(node, "disp_adj")
                 
                 # Right
                 for arg in Pp[i].args:
                     node = self.SS.node_map_rev[arg.args[1]]
                     if arg.args[0] < 0:
-                        prod2 *= self.circ_operators[node]["disp"]
+                        prod2 *= self.getOperator(node, "disp")
                     else:
-                        prod2 *= self.circ_operators[node]["disp_adj"]
+                        prod2 *= self.getOperator(node, "disp_adj")
             else:
                 prod1 = 1.0
                 prod2 = 1.0
                 node = self.SS.node_map_rev[Pp[i].args[1]]
                 if Pp[i].args[0] > 0:
-                    prod1 *= self.circ_operators[node]["disp"]
-                    prod2 *= self.circ_operators[node]["disp_adj"]
+                    prod1 *= self.getOperator(node, "disp")
+                    prod2 *= self.getOperator(node, "disp_adj")
                 else:
-                    prod1 *= self.circ_operators[node]["disp_adj"]
-                    prod2 *= self.circ_operators[node]["disp"]
+                    prod1 *= self.getOperator(node, "disp_adj")
+                    prod2 *= self.getOperator(node, "disp")
         
             Hj_l.append(-0.5*self.units.getPrefactor("Ej")*Jvec[i]*prod1)
             Hj_r.append(-0.5*self.units.getPrefactor("Ej")*Jvec[i]*prod2)
@@ -251,9 +205,9 @@ class NumericalSystem(TempData):
     ###################################################################################################################
     
     def getHamiltonian(self) -> qt.Qobj:
-        parts = self._numerical_parts
-        Q = self.circuit_operators.charge_op_vector + parts.charge_bias_vector
-        P = self.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
+        parts = self.state.numerical_parts
+        Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
+        P = self.state.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
 
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
@@ -279,25 +233,25 @@ class NumericalSystem(TempData):
                 for arg in Pp[i].args:
                     node = self.SS.node_map_rev[arg.args[1]]
                     if arg.args[0] > 0:
-                        prod1 *= self.circ_operators[node]["disp"]
+                        prod1 *= self.getOperator(node, "disp")
                     else:
-                        prod1 *= self.circ_operators[node]["disp_adj"]
+                        prod1 *= self.getOperator(node, "disp_adj")
                 
                 # Right
                 for arg in Pp[i].args:
                     node = self.SS.node_map_rev[arg.args[1]]
                     if arg.args[0] < 0:
-                        prod2 *= self.circ_operators[node]["disp"]
+                        prod2 *= self.getOperator(node, "disp")
                     else:
-                        prod2 *= self.circ_operators[node]["disp_adj"]
+                        prod2 *= self.getOperator(node, "disp_adj")
             else:
                 node = self.SS.node_map_rev[Pp[i].args[1]]
                 if Pp[i].args[0] > 0:
-                    prod1 *= self.circ_operators[node]["disp"]
-                    prod2 *= self.circ_operators[node]["disp_adj"]
+                    prod1 *= self.getOperator(node, "disp")
+                    prod2 *= self.getOperator(node, "disp_adj")
                 else:
-                    prod1 *= self.circ_operators[node]["disp_adj"]
-                    prod2 *= self.circ_operators[node]["disp"]
+                    prod1 *= self.getOperator(node, "disp_adj")
+                    prod2 *= self.getOperator(node, "disp")
         
             Hj += -0.5*parts.josephson_vector[i]*(prod1 + prod2)
         Hj *= self.units.getPrefactor("Ej")
@@ -306,7 +260,7 @@ class NumericalSystem(TempData):
         return (Hq + Hf + Hj).tidyup(_qobj_atol)
     
     def getCurrentOperator(self, edge=None) -> qt.Qobj:
-        parts = self._numerical_parts
+        parts = self.state.numerical_parts
 
         # Check edge
         if edge is None:
@@ -325,10 +279,10 @@ class NumericalSystem(TempData):
                 sum1 = 0
                 for arg in Pp[i].args:
                     node = self.SS.node_map_rev[arg.args[1]]
-                    sum1 += float(arg.args[0]) * self.circ_operators[node]["flux"]
+                    sum1 += float(arg.args[0]) * self.getOperator(node, "flux")
             else:
                 node = self.SS.node_map_rev[Pp[i].args[1]]
-                sum1 = float(Pp[i].args[0]) * self.circ_operators[node]["flux"]
+                sum1 = float(Pp[i].args[0]) * self.getOperator(node, "flux")
             
             # Take difference of node fluxes of corresponding branch and use *branch* inverse inductance matrix
             return self.units.getPrefactor("IopL") * sum1 * \
@@ -344,25 +298,25 @@ class NumericalSystem(TempData):
                 for arg in Pp[i].args:
                     node = self.SS.node_map_rev[arg.args[1]]
                     if arg.args[0] > 0:
-                        prod1 *= self.circ_operators[node]["disp"]
+                        prod1 *= self.getOperator(node, "disp")
                     else:
-                        prod1 *= self.circ_operators[node]["disp_adj"]
+                        prod1 *= self.getOperator(node, "disp_adj")
                 
                 # Right
                 for arg in Pp[i].args:
                     node = self.SS.node_map_rev[arg.args[1]]
                     if arg.args[0] < 0:
-                        prod2 *= self.circ_operators[node]["disp"]
+                        prod2 *= self.getOperator(node, "disp")
                     else:
-                        prod2 *= self.circ_operators[node]["disp_adj"]
+                        prod2 *= self.getOperator(node, "disp_adj")
             else:
                 node = self.SS.node_map_rev[Pp[i].args[1]]
                 if Pp[i].args[0] > 0:
-                    prod1 *= self.circ_operators[node]["disp"]
-                    prod2 *= self.circ_operators[node]["disp_adj"]
+                    prod1 *= self.getOperator(node, "disp")
+                    prod2 *= self.getOperator(node, "disp_adj")
                 else:
-                    prod1 *= self.circ_operators[node]["disp_adj"]
-                    prod2 *= self.circ_operators[node]["disp"]
+                    prod1 *= self.getOperator(node, "disp_adj")
+                    prod2 *= self.getOperator(node, "disp")
         
             return 0.5j * self.units.getPrefactor("IopJ") * \
                 parts.josephson_vector[i] * (prod1 - prod2)
@@ -391,8 +345,8 @@ class NumericalSystem(TempData):
         i = self.getNodeIndex(node)
         
         # Get charge superoperator including charge offsets
-        parts = self._numerical_parts
-        Q = self.circuit_operators.charge_op_vector + parts.charge_bias_vector
+        parts = self.state.numerical_parts
+        Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
 
         # Use the inverse capacitance matrix
         return self.units.getPrefactor("Vop") * Q[i, 0] * \
@@ -412,7 +366,7 @@ class NumericalSystem(TempData):
         return result
     
     def getChargingEnergies(self, node=None):
-        Cinv = self._numerical_parts.inverse_capacitance_matrix
+        Cinv = self.state.numerical_parts.inverse_capacitance_matrix
         if node is None:
             ret = {}
             for i, pos in enumerate(self.getNodeList()):
@@ -423,7 +377,7 @@ class NumericalSystem(TempData):
             return 0.5 * Cinv[i, i] * self.units.getPrefactor("Ec")
     
     def getFluxEnergies(self, node=None):
-        Linv = self._numerical_parts.inverse_inductance_matrix
+        Linv = self.state.numerical_parts.inverse_inductance_matrix
         if node is None:
             ret = {}
             for i, pos in enumerate(self.getNodeList()):
@@ -434,7 +388,7 @@ class NumericalSystem(TempData):
             return 0.5 * Linv[i, i] * self.units.getPrefactor("El")
     
     def getJosephsonEnergies(self, edge=None):
-        Jvec = self._numerical_parts.josephson_vector
+        Jvec = self.state.numerical_parts.josephson_vector
         if edge is None:
             ret = {}
             for i, edge in enumerate(self.SS.edges):
@@ -445,7 +399,7 @@ class NumericalSystem(TempData):
             return Jvec[i] * self.units.getPrefactor("Ej")
     
     def getPhaseSlipEnergies(self, edge=None):
-        Pvec = self._numerical_parts.phase_slip_vector
+        Pvec = self.state.numerical_parts.phase_slip_vector
         if edge is None:
             ret = {}
             for i, edge in enumerate(self.SS.edges):
@@ -476,8 +430,8 @@ class NumericalSystem(TempData):
         
         # Get the operator associated with selected node
         index = self.getNodeList().index(cpl_node)
-        Op = self.circuit_operators.charge_op_vector[index, 0] + \
-            self._numerical_parts.charge_bias_vector[index, 0]
+        Op = self.state.circuit_operators.charge_op_vector[index, 0] + \
+            self.state.numerical_parts.charge_bias_vector[index, 0]
         
         # Get coupling terms
         E = energies.data - energies.data[0]
@@ -564,7 +518,6 @@ class NumericalSystem(TempData):
                "Some parameters do not have valid values. All parameters should be set first with the " \
                "setParameterValues function in one go."
         self.substitute()
-        self.prepareOperators()
     
     ## Get the value of a parameter.
     def getParameterValue(self, name):
@@ -577,7 +530,6 @@ class NumericalSystem(TempData):
         assert all(value is not None for value in params.values()), "Not all parameters were set in this call. " \
                f"The missing parameters are {repr([name for name, value in params.items() if value is None])}"
         self.substitute()
-        self.prepareOperators()
     
     ## Get many parameter values.
     def getParameterValues(self, *names):
@@ -608,7 +560,8 @@ class NumericalSystem(TempData):
     def runSweep(self, sweep_config: SweepConfig, use_disk: bool = True) -> SweepResult:
         # FIXME: Determine if we should be saving the data to temp files rather than in RAM:
         # Use the diagonaliser configuration, the requested evaluation functions, and the total number of sweep setpoints that will be used.
-        self._perform_pre_sweep_substitutions(sweep_config)
+        # Substitute the static parameters, leaving the swept symbols free
+        self.state.substituteStatic(sweep_config.getStaticSymbols())
 
         evaluation_graph = sweep_config.getEvaluationGraph()
         if evaluation_graph is None:
@@ -620,7 +573,7 @@ class NumericalSystem(TempData):
             for sweep_point in point_gen:
                 # Set the parameter values, this updates the state for the next call to work
                 self.SS.setParameterValues(sweep_point)
-                self._perform_sweep_point_substitutions(sweep_config)
+                self.state.substituteSwept(sweep_config.getSweptSymbols())
 
                 # Compute evaluation graph
                 default_inputs = evaluation_graph.getDefaultInputs()
@@ -640,19 +593,6 @@ class NumericalSystem(TempData):
         else:
             return SweepResultFromMemory(sweep_config, results)
     
-    def _perform_pre_sweep_substitutions(self, sweep_config: SweepConfig):
-        # Substitute the static parameters, leaving the swept symbols free
-        self._mixed_parts = _MixedParts(self.SS, sweep_config.getStaticSymbols())
-
-    def _perform_sweep_point_substitutions(self, sweep_config: SweepConfig):
-        # Substitute the swept parameter values at the current sweep point
-        self._numerical_parts = _NumericalParts(
-            self._mixed_parts, sweep_config.getSweptSymbols()
-        )
-
-        # Regenerate the operators that depend on the swept parameters
-        self.circuit_operators.regenerateDependentOperators(sweep_config.getSweptSymbols())
-
     ###################################################################################################################
     #       Internal Functions
     ###################################################################################################################
@@ -684,7 +624,7 @@ class ClassicalPotentialBuilder:
         self._dof_map = {}
         self._critical_currents = self._hamil.getPrefactor('Ej') * self._get_critical_currents()
         self._inverse_inductance_matrix = 0.5 * hamil.getPrefactor('El') * \
-            self._hamil._numerical_parts.inverse_inductance_matrix
+            self._hamil.state.numerical_parts.inverse_inductance_matrix
         self._dof_symbol_vector = self._hamil.SS.getFluxVector(mode="branch") + \
                                  self._hamil.SS.getFluxBiasVector(mode="branch")
         self._get_input_format()

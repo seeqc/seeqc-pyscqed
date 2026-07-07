@@ -96,11 +96,13 @@ def test_configure_operator_creates_node_operators():
     hamil = NumericalSystem(get_symbolic_system())
 
     hamil.configureOperator(1, 40, "charge")
-    assert isinstance(hamil.operator_data[1], ChargeBasisOperators)
+    node_ops = hamil.state.circuit_operators.getNodeOperators(1)
+    assert isinstance(node_ops, ChargeBasisOperators)
 
     hamil.configureOperator(1, 30, "oscillator")
-    assert isinstance(hamil.operator_data[1], OscillatorBasisOperators)
-    assert hamil.operator_data[1].truncation == 30
+    node_ops = hamil.state.circuit_operators.getNodeOperators(1)
+    assert isinstance(node_ops, OscillatorBasisOperators)
+    assert node_ops.truncation == 30
 
     with pytest.raises(Exception, match="basis"):
         hamil.configureOperator(1, 20, "flux")

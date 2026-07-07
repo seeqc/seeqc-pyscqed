@@ -48,12 +48,6 @@ hamil.configureOperator(1,20,"charge")
 
 hamil.getHilbertSpaceSize()
 
-hamil.prepareOperators()
-
-# A full set of operators in the specified basis is generated for each node, including the charge, phase, and displacement operators. These can be accessed using the nested dictionary structure. For example here we get the charge operator associated with node 1:
-
-hamil.circ_operators[1]['charge']
-
 # Now we are ready to substitute parameter values. The available parameters can be obtained through the internal `ParamCollection` instance:
 
 hamil.getParameterNames()
@@ -74,6 +68,10 @@ hamil.setParameterValues(
     "phiZ", 0.5
 )
 # -
+
+# A full set of operators in the specified basis is generated for each node when parameter values are substituted, including the charge, phase, and displacement operators. These can be accessed using the `getOperator` method. For example here we get the charge operator associated with node 1:
+
+hamil.getOperator(1, 'charge')
 
 # Now we can generate the Hamiltonian using the substituted values:
 
@@ -457,7 +455,6 @@ hamil = NumericalSystem(circuit)
 hamil.configureOperator(1, 7, "charge")
 hamil.configureOperator(2, 7, "charge")
 hamil.configureOperator(3, 7, "charge")
-hamil.prepareOperators()
 hamil.getHilbertSpaceSize()
 
 # We see now that the Hilbert space is becoming very large. To potentially improve the diagonalisation time we will make use of sparse matrices. First lets set some parameters:
