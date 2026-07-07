@@ -1,6 +1,8 @@
 """Internal containers holding derived state used by the numerical simulation."""
 import numpy as np
+import qutip as qt
 
+from .operators import NodeOperators
 from .symbolic_system import SymbolicSystem
 
 
@@ -99,3 +101,70 @@ class _NumericalParts:
         flux_biases = np.diag(self.branch_flux_bias_matrix)
         self.positive_flux_bias_exponentials = list(np.exp(2j*np.pi*flux_biases))
         self.negative_flux_bias_exponentials = list(np.exp(-2j*np.pi*flux_biases))
+
+
+class CircuitOperators:
+    """Manages the node operator generators and their expansion into the total circuit
+    Hilbert space.
+
+    :param node_list: the circuit nodes in matrix ordering.
+    """
+
+    def __init__(self, node_list):
+        self._node_list = list(node_list)
+        self.operator_data = {}
+        self.circ_operators = {}
+
+    def __getitem__(self, node):
+        """ Returns the expanded operator dictionary of the given node. """
+        return self.circ_operators[node]
+
+    def setNodeOperators(self, node, node_operators: NodeOperators):
+        """ Assigns the operator generator for the given node.
+
+        :raises TypeError: if ``node_operators`` is not a
+            :class:`~pyscqed.operators.NodeOperators` instance.
+        """
+        if not isinstance(node_operators, NodeOperators):
+            raise TypeError(
+                "node_operators must be a NodeOperators instance, got '%s'."
+                % type(node_operators).__name__
+            )
+        self.operator_data[node] = node_operators
+
+    def generateExpandedOperators(self, nodes=None):
+        """ Generates the operators of each node (all if ``nodes`` is None) and expands them
+        into the total Hilbert space. """
+        # Generate the Hilbert space expanders
+        Ilist = [self.operator_data[node].getIdentity() for node in self._node_list]
+
+        for i, node in enumerate(self._node_list):
+            # Ignore nodes that are not in the list, if provided
+            if nodes is not None and node not in nodes:
+                continue
+
+            ops = self.operator_data[node]
+            ops.generate()
+
+            Olist = list(Ilist)
+            op_dict = {}
+            Olist[i] = ops.Q
+            op_dict["charge"] = qt.tensor(Olist)
+            Olist[i] = ops.P
+            op_dict["flux"] = qt.tensor(Olist)
+            Olist[i] = ops.D
+            op_dict["disp"] = qt.tensor(Olist)
+            Olist[i] = ops.Ddag
+            op_dict["disp_adj"] = qt.tensor(Olist)
+            self.circ_operators[node] = op_dict
+
+    def regenerateDependentOperators(self, symbols):
+        """ Regenerates the expanded operators of the nodes whose operators depend on any of
+        the given symbols. """
+        symbols = set(symbols)
+        nodes = [
+            node for node, ops in self.operator_data.items()
+            if ops.dependsOnSymbols(symbols)
+        ]
+        if nodes:
+            self.generateExpandedOperators(nodes)

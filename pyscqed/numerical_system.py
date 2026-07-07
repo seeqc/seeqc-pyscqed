@@ -10,7 +10,7 @@ import time
 from .dataspec import TempData
 from .symbolic_system import SymbolicSystem
 from .operators import ChargeBasisOperators, OscillatorBasisOperators, _qobj_atol
-from .simulation_state import _MixedParts, _NumericalParts, _SymbolicParts
+from .simulation_state import CircuitOperators, _MixedParts, _NumericalParts, _SymbolicParts
 from .sweeping import SweepConfig, SweepResult, SweepResultFromDisk, SweepResultFromMemory
 from .evaluation_graph import EvaluationGraph
 from .result import EigenvalueResult, EigenvectorResult, FunctionResult
@@ -58,10 +58,9 @@ class NumericalSystem(TempData):
         
         # Assign the circuit
         self.SS = symbolic_system
-        
-        # Nested dictionary for DoF operators, keyed by the relevant mode
-        self.circ_operators = {}
-        self.operator_data = {}
+
+        # Manager for the DoF operator generators and their expanded representations
+        self.circuit_operators = CircuitOperators(symbolic_system.nodes)
         
         # Set the unit system
         self.units = unit
@@ -90,7 +89,17 @@ class NumericalSystem(TempData):
     
     def getSymbolicSystem(self):
         return self.SS
-    
+
+    @property
+    def operator_data(self):
+        """ The node operator generators, keyed by node. """
+        return self.circuit_operators.operator_data
+
+    @property
+    def circ_operators(self):
+        """ The expanded node operators, keyed by node. """
+        return self.circuit_operators.circ_operators
+
     ## Get Hilbert space size
     def getHilbertSpaceSize(self):
         """ Returns the Hilbert space size considering all currently defined operator truncations.
@@ -133,10 +142,10 @@ class NumericalSystem(TempData):
         if node not in self.getNodeList():
             raise Exception("Node '%i' is not a valid circuit node." % node)
         if basis == "charge":
-            self.operator_data[node] = ChargeBasisOperators(node, trunc)
+            self.circuit_operators.setNodeOperators(node, ChargeBasisOperators(node, trunc))
         elif basis == "oscillator":
-            self.operator_data[node] = OscillatorBasisOperators(
-                node, trunc, self.SS, self.units
+            self.circuit_operators.setNodeOperators(
+                node, OscillatorBasisOperators(node, trunc, self.SS, self.units)
             )
         else:
             raise Exception("Unrecognized basis representation '%s'." % repr(basis))
@@ -146,60 +155,6 @@ class NumericalSystem(TempData):
         ops = self.operator_data[node]
         ops.generate()
         return ops.Q, ops.P, ops.D, ops.Ddag
-    
-    ## Expand operator Hilbert spaces and update mapping to associated symbols
-    def getExpandedOperatorsMap(self, nodes=None):
-        """ Creates all the operators associated with each node in the currently defined circuit. The operators are expanded into the total Hamiltonian Hilbert space.
-        
-        :return: None
-        """
-        
-        # Get the pos list for indexing the DoFs
-        node_list = self.getNodeList()
-        
-        # Generate the Hilbert space expanders
-        Ilist = np.empty([len(node_list)], dtype=np.dtype(qt.Qobj))
-        for i, node in enumerate(node_list):
-            Ilist[i] = self.operator_data[node].getIdentity()
-        
-        # Create mode operators
-        Olist = np.empty([len(node_list)], dtype=np.dtype(qt.Qobj))
-        op_dict = {}
-        for i, node in enumerate(node_list):
-            # Ignore nodes that are not in the list, if provided
-            if nodes is not None:
-                if node not in nodes:
-                    continue
-            
-            op_dict = {}
-            Q, P, D, Ddag = self.getOperatorList(node)
-            
-            # Indices minus the current index
-            indices = list(range(len(node_list)))
-            indices.remove(i)
-            
-            # Current index is the operator
-            Olist[i] = Q
-            for j in indices:
-                Olist[j] = Ilist[j]
-            op_dict["charge"] = qt.tensor(Olist)
-            
-            Olist[i] = P
-            for j in indices:
-                Olist[j] = Ilist[j]
-            op_dict["flux"] = qt.tensor(Olist)
-            
-            Olist[i] = D
-            for j in indices:
-                Olist[j] = Ilist[j]
-            op_dict["disp"] = qt.tensor(Olist)
-            
-            Olist[i] = Ddag
-            for j in indices:
-                Olist[j] = Ilist[j]
-            op_dict["disp_adj"] = qt.tensor(Olist)
-
-            self.circ_operators[node] = op_dict.copy()
     
     ###################################################################################################################
     #       Hamiltonian Building Functions
@@ -225,7 +180,7 @@ class NumericalSystem(TempData):
         self._symbolic_parts = _SymbolicParts(self.SS)
     
     def prepareOperators(self):
-        self.getExpandedOperatorsMap()
+        self.circuit_operators.generateExpandedOperators()
         self.getChargeOpVector()
         self.getFluxOpVector()
 
@@ -708,31 +663,14 @@ class NumericalSystem(TempData):
         # Substitute the static parameters, leaving the swept symbols free
         self._mixed_parts = _MixedParts(self.SS, sweep_config.getStaticSymbols())
 
-        # Find which operators will need to be regenerated for each sweep
-        self._get_dynamic_node_dofs(sweep_config)
-    
-    def _get_dynamic_node_dofs(self, sweep_config: SweepConfig):
-        # FIXME: Could identify the precise parameter and where they occur in the sweep to only regenerate when necessary rather than every iteration. This would require _postsub to know which iteration we are at.
-        
-        # Get the parameters that are being swept
-        sweep_syms = set(sweep_config.getSweptSymbols())
-        
-        # For each node:
-        self.regen_nodes = []
-        for node, data in self.operator_data.items():
-            # Check if the operators depend on the swept parameters
-            if data.dependsOnSymbols(sweep_syms):
-                self.regen_nodes.append(node)
-    
     def _perform_sweep_point_substitutions(self, sweep_config: SweepConfig):
         # Substitute the swept parameter values at the current sweep point
         self._numerical_parts = _NumericalParts(
             self._mixed_parts, sweep_config.getSweptSymbols()
         )
 
-        # Regenerate operators if required
-        if self.regen_nodes != []:
-            self.getExpandedOperatorsMap(self.regen_nodes)
+        # Regenerate the operators that depend on the swept parameters
+        self.circuit_operators.regenerateDependentOperators(sweep_config.getSweptSymbols())
 
     ###################################################################################################################
     #       Internal Functions

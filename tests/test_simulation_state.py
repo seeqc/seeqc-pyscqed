@@ -4,8 +4,15 @@ import numpy as np
 
 from pyscqed.circuit_graph import CircuitGraph
 from pyscqed.symbolic_system import SymbolicSystem
-from pyscqed.simulation_state import _MixedParts, _NumericalParts, _SymbolicParts
+from pyscqed.operators import ChargeBasisOperators, OscillatorBasisOperators
+from pyscqed.simulation_state import (
+    CircuitOperators,
+    _MixedParts,
+    _NumericalParts,
+    _SymbolicParts,
+)
 from pyscqed.numerical_system import NumericalSystem
+from pyscqed.units import Units
 
 
 def get_single_node_graph() -> CircuitGraph:
@@ -225,3 +232,62 @@ def test_sweep_regenerates_oscillator_basis_operators():
     # The oscillator impedance depends on the swept parameter, so regeneration
     # is scheduled and the operator vectors must track the new operators
     assert hamil.circ_operators[1]["charge"] is not old_charge
+
+
+def test_circuit_operators_expansion():
+    ops = CircuitOperators([1])
+    ops.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    ops.generateExpandedOperators()
+
+    assert set(ops.circ_operators[1].keys()) == {"charge", "flux", "disp", "disp_adj"}
+    assert ops[1] is ops.circ_operators[1]
+    assert ops[1]["charge"].shape == (7, 7)
+
+
+def test_circuit_operators_expansion_multiple_nodes():
+    ops = CircuitOperators([1, 2])
+    ops.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    ops.setNodeOperators(2, ChargeBasisOperators(2, 2))
+    ops.generateExpandedOperators()
+
+    # Operators are expanded into the total Hilbert space of dimension 7 * 5
+    assert ops[1]["charge"].shape == (35, 35)
+    assert ops[2]["charge"].shape == (35, 35)
+
+
+def test_circuit_operators_rejects_invalid_node_operators():
+    ops = CircuitOperators([1])
+    with pytest.raises(TypeError):
+        ops.setNodeOperators(1, {"truncation": 3})
+
+
+def test_circuit_operators_regenerates_dependent_nodes():
+    symbolic = get_symbolic_system()
+    circuit_ops = CircuitOperators(symbolic.nodes)
+    circuit_ops.setNodeOperators(
+        1, OscillatorBasisOperators(1, 10, symbolic, Units("CQED1"))
+    )
+    symbolic.setParameterValue("C", 20.0)
+    symbolic.setParameterValue("I", 40e-3)
+    symbolic.setParameterValue("L", 50.0)
+    circuit_ops.generateExpandedOperators()
+    old_charge = circuit_ops[1]["charge"]
+
+    # Symbols the operators do not depend on leave them untouched
+    circuit_ops.regenerateDependentOperators({symbolic.getSymbol("I")})
+    assert circuit_ops[1]["charge"] is old_charge
+
+    # Symbols the impedance depends on trigger regeneration
+    circuit_ops.regenerateDependentOperators({symbolic.getSymbol("C")})
+    assert circuit_ops[1]["charge"] is not old_charge
+
+
+def test_numerical_system_holds_circuit_operators():
+    hamil = NumericalSystem(get_symbolic_system())
+    assert isinstance(hamil.circuit_operators, CircuitOperators)
+
+    hamil.configureOperator(1, 40, "charge")
+    assert isinstance(hamil.operator_data[1], ChargeBasisOperators)
+
+    hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
+    assert set(hamil.circ_operators[1].keys()) == {"charge", "flux", "disp", "disp_adj"}
