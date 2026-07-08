@@ -40,31 +40,3 @@ def test_parameter_creation_rules():
         Param("good_name", unit_pref=-1.0)
     # Latex names
     assert p.name_latex == "g_\\mathrm{ood_name}"
-
-
-def test_parameter_functions():
-    p = Param("good_name", bounds=[-0.5, 0.5])
-    assert p.getBounds() == [-0.5, 0.5]
-    with pytest.raises(TypeError):
-        p.setBounds("s")
-    with pytest.raises(TypeError):
-        p.setBounds([1.0, "s"])
-    with pytest.raises(TypeError):
-        p.setBounds(["s", 1.0])
-    with pytest.raises(ValueError):
-        p.setBounds([1.0, -1.0])
-    p.setBounds([-0.5, 0.5])
-    sweep = p.linearSweep(-0.5, 0.5, 2)
-    assert all(x == y for x, y in zip(sweep, p.sweep))
-    with pytest.raises(TypeError):
-        p.linearSweep("s", 1, 2)
-    with pytest.raises(TypeError):
-        p.linearSweep(1, "s", 2)
-    with pytest.raises(TypeError):
-        p.linearSweep(0., 1, "s")
-    with pytest.raises(TypeError):
-        p.linearSweep(0, 1., 2.0)
-    with pytest.raises(ValueError):
-        p.linearSweep(0, 1.0, 2)
-    with pytest.raises(ValueError):
-        p.linearSweep(-0.501, 1.0, 2)

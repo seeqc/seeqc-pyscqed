@@ -21,36 +21,7 @@ _ParameterisationData: TypeAlias = dict[str, dict[str, Any]]
 _PCInternalData: TypeAlias = tuple[dict[str, "Param"], dict[str, sy.Symbol], _ParameterisationData, nx.DiGraph]
 
 class Param:
-    """This class defines the properties of a parameter used in simulations and experiments. It supports upper and lower bounds and the generation of sweeps for scalars.
-    
-    :param name: The utf name of the parameter.
-    :type name: str
-    
-    :param value: The initial value to set the parameter to, defaults to `None`.
-    :type value: int float np.float64, optional
-    
-    :param bounds: The lower and upper bounds of the parameter, defaults to `[-np.inf, np.inf]`.
-    :type bounds: list of floats, optional
-    
-    :param unit_pref: A prefactor that encode the unit of the parameter, defaults to `1.0`.
-    :type unit_pref: int float np.float64, optional
-    
-    :raises Exception: If the parameters are not accepted types or the initial value is out of bounds.
-    
-    :return: A new instance of :class:`Param`.
-    :rtype: :class:`Param`
-    
-    This constructor attempts to generate a latex version of the parameter name for use with plots. It uses the :py:mod:`pycqed.src.text2latex` module for this functionality. The constructor also creates a `sympy` symbol associated with the parameter. The first character is the symbol and the following characters are subscripted.
-    
-    The following class attributes are accessible by the user:
-    
-    :ivar name: The utf string of the parameter.
-    :ivar name_latex: A string to be used with latex.
-    :ivar symbol: A `sympy` symbol for the parameter.
-    :ivar sweep: The sweep array.
-    """
     __valid_scalar_types = [int, float, np.float64]
-    
     def __init__(
         self,
         name: str,
@@ -96,8 +67,6 @@ class Param:
         self.__upper_bound = float(bounds[1])
         self.__upref = float(unit_pref)
         self.name_latex = t2l.latexify_param_name(self.name)
-        self.sweep = np.array([])
-        self.N = 0
     
     def getValue(self) -> float | None:
         """ Get the current value of the parameter.
@@ -160,72 +129,9 @@ class Param:
         
         self.__lower_bound = float(bounds[0])
         self.__upper_bound = float(bounds[1])
-    
-    def linearSweep(self, start: float, end: float, N: int) -> np.ndarray:
-        """ Generates a linear sweep using `numpy.linspace` with added bounds checking. The sweep is saved internally, and is overwritten by subsequent calls to this function.
-        
-        :param start: The initial value of the sweep.
-        :type start: float
-        
-        :param end: The last value of the sweep.
-        :type end: float
-        
-        :param N: The number of points from start to end.
-        :type N: int
-        
-        :raises Exception: If the argument types are incorrect, or if start and end are out of bounds.
-        
-        :return: The parameter sweep array.
-        :rtype: numpy.ndarray
-        """
-        # Ensure start is a float
-        if type(start) not in self.__valid_scalar_types:
-            raise TypeError("'start' is not a float.")
-        # Ensure end is a float
-        if type(end) not in self.__valid_scalar_types:
-            raise TypeError("'end' is not a float.")
-        # Ensure N is an int
-        if type(N) is not int:
-            raise TypeError("'N' is not an int.")
-        
-        # Check bounds
-        if float(start) > self.__upper_bound:
-            raise ValueError("Param %s 'start' exceeds specified upper bound." % (self.name))
-        if float(start) < self.__lower_bound:
-            raise ValueError("Param %s 'start' exceeds specified lower bound." % (self.name))
-        if float(end) > self.__upper_bound:
-            raise ValueError("Param %s 'end' exceeds specified upper bound." % (self.name))
-        if float(end) < self.__lower_bound:
-            raise ValueError("Param %s 'end' exceeds specified lower bound." % (self.name))
-        
-        self.sweep = np.linspace(float(start), float(end), N)
-        self.N = N
-        return self.sweep
 
-# FIXME: This class should technically inherit the unit system
+
 class ParamCollection:
-    """ This class uses an array of :class:`Param` instances and provides methods to manipulate them in useful ways, for example to create multidimensional sweeps and return substitution dictionaries. It also provides an equation system, to allow parameters to be created in terms of others, or to specify inter-dependencies.
-    
-    :param names: A list of parameter names to create.
-    :type names: list of str
-    
-    :raises Exception: If the names are not strings (raised by the underlying :class:`Param` constructor).
-    
-    :return: A new instance of :class:`ParamCollection`
-    :rtype: :class:`ParamCollection`
-    
-    The following class attributes are accessible by the user. These attributes are created or overwritten by calls to :func:`ndSweep`, except the last, which is created or overwritten by calls to :func:`computeFuncSweep` and :func:`computeExprSweep`.
-    
-    :ivar sweep_spec: An array of sweep specifications.
-    :ivar sweep_grid_npts: The number of points in the current parameters sweep.
-    :ivar sweep_grid_ndims: The number of dimensions or parameters being swept.
-    :ivar sweep_grid_params: The list of parameters being swept.
-    :ivar sweep_grid_c: Dictionary of collapsed sweeps keyed by parameter name.
-    :ivar sweep_grid_nc: Dictionary of non-collapsed sweeps keyed by parameter name.
-    :ivar sweep_grid_result: One-dimensional array of values (or objects) that result from computing a sweep with the collapsed grid.
-    
-    """
-    
     def __init__(self, names: list[str]) -> None:
         self.__collection = {}
         self.__symbol_map = {}
@@ -415,22 +321,6 @@ class ParamCollection:
             raise ValueError("'%s' parameter was not found." % name)
         
         return self.__collection[name].getValue()
-    
-    def getParameterSweep(self, name: str) -> np.ndarray:
-        """ Get the parameter sweep associated with a parameter.
-        
-        :param name: The name of the parameter.
-        :type name: str
-        
-        :raises Exception: If the parameter is not in the collection.
-        
-        :return: The sweep array.
-        :rtype: numpy.ndarray
-        """
-        # Check name is defined
-        if name not in list(self.__collection.keys()):
-            raise ValueError("'%s' parameter was not found." % name)
-        return self.__collection[name].sweep
     
     def getParameterLatexName(self, name: str) -> str:
         """ Get the latex name of the parameter.
