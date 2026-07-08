@@ -136,11 +136,13 @@ plt.ylabel("$E_{g,0}$ (GHz)")
 
 # +
 hamil.setParameterValue("L", 500.0)
-potential, inputs = hamil.getClassicalPotentialFunction()
+builder = ClassicalPotentialBuilder(hamil)
+potential = builder.getPotentialFunction()
 V1 = potential({'phi1': x, 'phiZ': 0.0})
 
 hamil.setParameterValue("L", 1000.0)
-potential, inputs = hamil.getClassicalPotentialFunction()
+builder = ClassicalPotentialBuilder(hamil)
+potential = builder.getPotentialFunction()
 V2 = potential({'phi1': x, 'phiZ': 0.0})
 
 plt.plot(x, V1, label="$L=%.1f$"%500)
@@ -220,7 +222,9 @@ plt.ylabel("$E_{g,i}$ (GHz)")
 
 circuit.getClassicalHamiltonian()
 
-potential, inputs = hamil.getClassicalPotentialFunction()
+builder = ClassicalPotentialBuilder(hamil)
+potential = builder.getPotentialFunction()
+inputs = builder.getDefaultInputs()
 inputs
 
 p1 = np.linspace(-1.0, 1.0, 201)
@@ -288,7 +292,9 @@ plt.ylabel("$E_{g,i}$ (GHz)")
 
 # Indeed we see that making one of the junctions smaller significantly increases the tunnel rate. We can compare the potential in this case:
 
-potential, inputs = hamil.getClassicalPotentialFunction()
+builder = ClassicalPotentialBuilder(hamil)
+potential = builder.getPotentialFunction()
+inputs = builder.getDefaultInputs()
 inputs['phiZ'] = 0.5
 inputs['phi1'] = p1g
 inputs['phi2'] = p2g

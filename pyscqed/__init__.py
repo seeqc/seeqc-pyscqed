@@ -4,6 +4,7 @@ __all__ = [
     "NumericalSystem",
     "HamiltonianSpectrum",
     "SingleResonatorInteraction",
+    "ClassicalPotentialBuilder",
     "ProjectData",
     "ParamCollection",
     "EvaluationGraph",
@@ -17,6 +18,7 @@ __all__ = [
 from .circuit_graph import CircuitGraph
 from .symbolic_system import SymbolicSystem
 from .numerical_system import NumericalSystem, HamiltonianSpectrum, SingleResonatorInteraction
+from .classical_potential import ClassicalPotentialBuilder
 from .dataspec import ProjectData
 from .units import Units, units_presets
 from .parameters import ParamCollection

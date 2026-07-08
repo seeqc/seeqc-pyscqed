@@ -74,8 +74,12 @@ class SymbolicSystem(ParamCollection):
         # Get representation transformation matrices
         self._get_topology_matrices()
         
-        # Get coordinate transformation matrices
-        self._create_coordinate_transforms()
+        # Create the identity transforms
+        M = sy.Matrix(np.diag([1.0] * len(self.nodes)))
+        self.R = M
+        self.RT = M
+        self.Rinv = M
+        self.RinvT = M
         
         # Populate the degrees of freedom
         self._create_node_dofs()
@@ -512,9 +516,6 @@ class SymbolicSystem(ParamCollection):
                         self.charge_prefix, edge[0], edge[1], edge[2]
                     ))
     
-    def _add_loop_dofs(self) -> None:
-        pass
-    
     def _get_topology_matrices(self) -> None:
         # nx incidence matrix is Nn rows by Nb columns
         I = nx.incidence_matrix(self.CG.sc_spanning_tree_wc, oriented=True).toarray() * -1
@@ -672,41 +673,3 @@ class SymbolicSystem(ParamCollection):
                 "%s%s" % (self.charge_prefix, suffix),
                 sy.symbols("%s_{%s}" % (self.charge_prefix, suffix))
             )
-
-    def _create_coordinate_transforms(self) -> None:
-        self.coordinate_modes = {}
-
-        Linv = self.getInverseInductanceMatrix()
-
-        # Create the identity transforms
-        M = sy.Matrix(np.diag([1.0]*Linv.shape[0]))
-        self.R = M
-        self.RT = M
-        self.Rinv = M
-        self.RinvT = M
-
-        all_indices = set(range(Linv.shape[0]))
-        ch_indices = set()
-        index = 0
-        while ch_indices != all_indices:
-            if Linv[index, index] == 0:
-                self.coordinate_modes[self.nodes[index]] = "charge"
-                ch_indices.add(index)
-                index += 1
-                continue
-
-            # Check the row
-            # FIXME: This is too harsh: block diagonal matrices are actually acceptable
-            # as couplings between oscillator modes are allowed.
-            coupled = False
-            for i in range(index+1, Linv.shape[0]):
-                if Linv[index, i] != 0:
-                    coupled = True
-                    self.coordinate_modes[self.nodes[i]] = "charge"
-                    ch_indices.add(i)
-            if coupled:
-                self.coordinate_modes[self.nodes[index]] = "charge"
-            else:
-                self.coordinate_modes[self.nodes[index]] = "oscillator"
-            ch_indices.add(index)
-            index += 1
