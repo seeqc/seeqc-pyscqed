@@ -83,7 +83,6 @@ class SymbolicSystem(ParamCollection):
         
         # Populate the degrees of freedom
         self._create_node_dofs()
-        self._add_branch_dofs()
 
     #
     # CHARGE
@@ -495,27 +494,6 @@ class SymbolicSystem(ParamCollection):
             else: # Case where there is a single element
                 self.cooper_disp[node] = abs(float(Pp[i].args[0]))
 
-    # FIXME: Is this still required?
-    def _add_branch_dofs(self) -> None:
-        self.branch_dofs = {}
-        self.classical_branch_dofs = {}
-        for edge in self.CG.sc_spanning_tree_wc.edges:
-            self.branch_dofs[edge] = \
-                    sy.symbols("%s_{%i%i-%i} %s_{%i%i-%i} %s_{%i%i-%i} %s_{%i%i-%i}" % \
-                    (
-                        self.flux_prefix, edge[0], edge[1], edge[2],
-                        self.charge_prefix, edge[0], edge[1], edge[2],
-                        "D", edge[0], edge[1], edge[2],
-                        "D^{\\dagger}", edge[0], edge[1], edge[2]
-                    ), commutative=False)
-            self.classical_branch_dofs[edge] = \
-                    sy.symbols("%s_{%i%i-%i} %s_{%i%i-%i} %s_{%i%i-%i}" % \
-                    (
-                        self.flux_prefix, edge[0], edge[1], edge[2],
-                        self.redflux_prefix, edge[0], edge[1], edge[2],
-                        self.charge_prefix, edge[0], edge[1], edge[2]
-                    ))
-    
     def _get_topology_matrices(self) -> None:
         # nx incidence matrix is Nn rows by Nb columns
         I = nx.incidence_matrix(self.CG.sc_spanning_tree_wc, oriented=True).toarray() * -1
