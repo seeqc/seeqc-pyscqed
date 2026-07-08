@@ -114,20 +114,20 @@ class SymbolicSystem(ParamCollection):
             for edge in self.CG.circuit_graph.edges(node, keys=True):
                 cstr = self.CG.components_map[edge]
                 if cstr[0] == self.CG._element_prefixes[0]:
-                    M[i, i] += self.circuit_params[cstr]
+                    M[i, i] += self.getSymbol(cstr)
 
             # Add the gate capacitances
             if node in self.CG.charge_bias_nodes:
                 if self.CG.charge_bias_nodes[node]["coupling_capacitance"] is not None:
                     cstr = self.CG.charge_bias_nodes[node]["coupling_capacitance"]
-                    M[i, i] += self.circuit_params[cstr]
+                    M[i, i] += self.getSymbol(cstr)
 
             # Add the resonator capacitances
             if self.CG.resonators_cap[node] is not None:
                 cstr1 = self.CG.resonators_cap[node]['coupling']
                 cstr2 = self.CG.resonators_cap[node]['Cr']
-                Cc = self.circuit_params[cstr1]
-                Cr = self.circuit_params[cstr2]
+                Cc = self.getSymbol(cstr1)
+                Cr = self.getSymbol(cstr2)
 
                 # Effective capacitance due to the resonator
                 M[i, i] += Cc*Cr/(Cc + Cr)
@@ -140,8 +140,8 @@ class SymbolicSystem(ParamCollection):
                     continue
                 i = self.nodes.index(edge[0])
                 j = self.nodes.index(edge[1])
-                M[i, j] -= self.circuit_params[cstr]
-                M[j, i] -= self.circuit_params[cstr]
+                M[i, j] -= self.getSymbol(cstr)
+                M[j, i] -= self.getSymbol(cstr)
 
         if not parameterise:
             return M
@@ -286,15 +286,15 @@ class SymbolicSystem(ParamCollection):
             if edge not in self.CG.flux_bias_edges:
                 cstr = self.CG.components_map[edge]
                 if cstr[0] == self.CG._element_prefixes[1]:
-                    Mb[i, i] = self.circuit_params[cstr]
+                    Mb[i, i] = self.getSymbol(cstr)
             else: # FIXME: Need to account for the case where the bias source inductance is not matched to the in-circuit inductance.
                 cstr = self.CG.components_map[edge]
                 if cstr[0] == self.CG._element_prefixes[1]:
-                    L = self.circuit_params[cstr]
+                    L = self.getSymbol(cstr)
                     if self.CG.flux_bias_edges[edge]["mutual_inductance"] is None:
                         Mb[i, i] = L
                     else:
-                        M = self.circuit_params[self.CG.flux_bias_edges[edge]]["mutual_inductance"]
+                        M = self.getSymbol(self.CG.flux_bias_edges[edge]["mutual_inductance"])
                         Mb[i, i] = (L**2 - M**2)/L
 
         # Off-diagonals: always coupled branches
@@ -302,8 +302,8 @@ class SymbolicSystem(ParamCollection):
             edge1, edge2 = edges
             i = self.edges.index(edge1)
             j = self.edges.index(edge2)
-            Mb[i, j] = self.circuit_params[component]
-            Mb[j, i] = self.circuit_params[component]
+            Mb[i, j] = self.getSymbol(component)
+            Mb[j, i] = self.getSymbol(component)
 
         # Transform to node representation
         if mode == "node":
@@ -360,7 +360,7 @@ class SymbolicSystem(ParamCollection):
         for i, edge in enumerate(self.edges):
             cstr = self.CG.components_map[edge]
             if cstr[0] == self.CG._element_prefixes[2]:
-                vec[i] = self.circuit_params[cstr]
+                vec[i] = self.getSymbol(cstr)
         return sy.Matrix(vec)
     
     def getJosephsonEnergies(self) -> dict[CircuitGraphEdge, sy.Expr]:
@@ -506,29 +506,24 @@ class SymbolicSystem(ParamCollection):
     
     def _create_circuit_symbols(self) -> None:
         # Circuit components
-        self.circuit_params = {} # FIXME: This attribute is now redundant, use the getSymbol function from parameters parent class.
         components = nx.get_edge_attributes(self.CG.circuit_graph, 'component').values()
         for component in components:
-            self.circuit_params[component] = sy.symbols("%s_{%s}" % (component[0], component[1:]))
             self.addParameter(component)
 
         # Mutually coupled branches
         for component, edges in self.CG.coupled_branches.items():
-            self.circuit_params[component] = sy.symbols("%s_{%s}" % (component[0], component[1:]))
             self.addParameter(component)
 
         # Charge bias capacitors
         for node, data in self.CG.charge_bias_nodes.items():
             component = data["coupling_capacitance"]
             if component is not None:
-                self.circuit_params[component] = sy.symbols("%s_{%s}" % (component[0], component[1:]))
                 self.addParameter(component)
 
         # Flux bias mutual inductors
         for node, data in self.CG.flux_bias_edges.items():
             component = data["mutual_inductance"]
             if component is not None:
-                self.circuit_params[component] = sy.symbols("%s_{%s}" % (component[0], component[1:]))
                 self.addParameter(component)
 
     def _has_resonators(self) -> bool:
@@ -545,8 +540,8 @@ class SymbolicSystem(ParamCollection):
             
             # Update the circuit parameters and create the symbols
             for k, var in resonator.items():
-                self.circuit_params[var] = sy.symbols("%s_{%s}" % (var[0], var[1:]))
-                self.resonator_symbols_cap[node][k] = self.circuit_params[var]
+                self.addParameter(var)
+                self.resonator_symbols_cap[node][k] = self.getSymbol(var)
     
     def _create_loaded_resonator_parameters(self) -> None:
         
