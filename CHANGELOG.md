@@ -10,9 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Sweeping system overhauled with a new reliable API.
 - Input types for some functions.
+- The classical potential builder is now an independent type that depends on `NumericalSystem`.
+- Significant internal refactor and improved testing.
 
 ### Bugfixes
 - Inconsistent and broken behaviours associated with the old sweeping API.
+- Sweeping a circuit element parameter that appears in oscillator basis operators now works correctly.
+
+### Removed
+- Unfinished features that were unusable
 
 ## [0.13.0] - 2024-07-23
 
