@@ -17,7 +17,6 @@ class SymbolicSystem(ParamCollection):
         self,
         graph: CircuitGraph,
         dof_prefixes: list[str] = ["\\Phi", "\\phi", "Q", "q"],
-        mode_transform: bool = False,
         quiet: bool = False
     ) -> None:
         """
@@ -30,10 +29,7 @@ class SymbolicSystem(ParamCollection):
         self.CG = graph
         if 0 not in self.CG.circuit_graph.nodes:
             raise Exception("CircuitGraph instance must include the ground node as 0.")
-        
-        # Transform the mode coordinates?
-        self.use_transform = mode_transform
-        
+
         # Get useful data before hand for efficiency
         self.Nn = len(self.CG.circuit_graph.nodes)-1 # Don't count the ground node
         self.Nb = len(self.CG.sc_spanning_tree_wc.edges)
@@ -93,35 +89,7 @@ class SymbolicSystem(ParamCollection):
         # Populate the degrees of freedom
         self._create_node_dofs()
         self._add_branch_dofs()
-    
-    #
-    # TRANSFORM
-    #
-    def setTransform(self, V: np.ndarray) -> None:
-        # We require the transform for the flux coordinates in np.matrix format
-        self.R = sy.Matrix(V)
-        self.RT = self.R.T
-        self.Rinv = self.R**(-1)
-        self.RinvT = self.Rinv.T
-        
-        # Get the raw Linv
-        self.use_transform = False
-        Linv = self.getInverseInductanceMatrix()
-        self.use_transform = True
-        
-        # Update the coordinate modes
-        M = self.RinvT*Linv*self.Rinv
-        for i in range(M.shape[0]):
-            if M[i, i] != 0:
-                self.coordinate_modes[self.nodes[i]] = "oscillator"
-            else:
-                self.coordinate_modes[self.nodes[i]] = "charge"
-        print("Optimal basis representations for the circuit coordinates:")
-        print(self.coordinate_modes)
-        
-        # Update the node DoFs
-        self._create_node_dofs()
-    
+
     #
     # CHARGE
     #
@@ -201,10 +169,7 @@ class SymbolicSystem(ParamCollection):
     def getInverseCapacitanceMatrix(self, parameterise: bool = True) -> sy.Matrix:
         # Try to invert the inductance matrix as-is
         try:
-            if self.use_transform:
-                M = self.R*self.getCapacitanceMatrix(parameterise=parameterise)**(-1)*self.RT
-            else:
-                M = self.getCapacitanceMatrix(parameterise=parameterise)**(-1)
+            M = self.getCapacitanceMatrix(parameterise=parameterise)**(-1)
         except Exception:
             print("Capacitance matrix is singular, need at least one capacitor connected to every node.")
             raise
@@ -374,8 +339,6 @@ class SymbolicSystem(ParamCollection):
         # Take the pseudo-inverse of the branch inductance matrix
         if mode == "node":
             M = self.Rbn*Mb.pinv()*self.Rnb
-            if self.use_transform:
-                M = self.RinvT * M * self.Rinv
             if not parameterise:
                 return M
             # Parameterise the matrix elements
@@ -393,8 +356,6 @@ class SymbolicSystem(ParamCollection):
 
         elif mode == "branch":
             Mb = Mb.pinv()
-            if self.use_transform:
-                Mb = self.Rnb*self.RinvT*self.Rbn*Mb*self.Rnb*self.Rinv*self.Rbn
             return Mb
 
     #
@@ -723,66 +684,38 @@ class SymbolicSystem(ParamCollection):
 
     def _create_coordinate_transforms(self) -> None:
         self.coordinate_modes = {}
-        
-        # Find oscillator modes
-        if self.use_transform:
-            # Get the inverse inductance matrix in node representation
-            self.use_transform = False
-            Linv = self.getInverseInductanceMatrix()
-            self.use_transform = True
-            
-            # Get the transformation matrices
-            V, D = Linv.diagonalize()
-            if V.free_symbols != set():
-                print("Warning: A suitable transformation couldn't be identified automatically. Set one manually using the setTransform function.")
-                self.use_transform = False
-                self._create_coordinate_transforms()
-                return
-            
-            self.R = V
-            self.RT = V.T
-            self.Rinv = V**(-1)
-            self.RinvT = self.Rinv.T
-            
-            # Update the coordinate modes
-            M = self.RinvT*Linv*self.Rinv
-            for i in range(M.shape[0]):
-                if M[i, i] != 0:
-                    self.coordinate_modes[self.nodes[i]] = "oscillator"
-                else:
-                    self.coordinate_modes[self.nodes[i]] = "charge"
-        else:
-            Linv = self.getInverseInductanceMatrix()
-            
-            # Create the identity transforms
-            M = sy.Matrix(np.diag([1.0]*Linv.shape[0]))
-            self.R = M
-            self.RT = M
-            self.Rinv = M
-            self.RinvT = M
-            
-            all_indices = set(range(Linv.shape[0]))
-            ch_indices = set()
-            index = 0
-            while ch_indices != all_indices:
-                if Linv[index, index] == 0:
-                    self.coordinate_modes[self.nodes[index]] = "charge"
-                    ch_indices.add(index)
-                    index += 1
-                    continue
-                
-                # Check the row
-                # FIXME: This is too harsh: block diagonal matrices are actually acceptable
-                # as couplings between oscillator modes are allowed.
-                coupled = False
-                for i in range(index+1, Linv.shape[0]):
-                    if Linv[index, i] != 0:
-                        coupled = True
-                        self.coordinate_modes[self.nodes[i]] = "charge"
-                        ch_indices.add(i)
-                if coupled:
-                    self.coordinate_modes[self.nodes[index]] = "charge"
-                else:
-                    self.coordinate_modes[self.nodes[index]] = "oscillator"
+
+        Linv = self.getInverseInductanceMatrix()
+
+        # Create the identity transforms
+        M = sy.Matrix(np.diag([1.0]*Linv.shape[0]))
+        self.R = M
+        self.RT = M
+        self.Rinv = M
+        self.RinvT = M
+
+        all_indices = set(range(Linv.shape[0]))
+        ch_indices = set()
+        index = 0
+        while ch_indices != all_indices:
+            if Linv[index, index] == 0:
+                self.coordinate_modes[self.nodes[index]] = "charge"
                 ch_indices.add(index)
                 index += 1
+                continue
+
+            # Check the row
+            # FIXME: This is too harsh: block diagonal matrices are actually acceptable
+            # as couplings between oscillator modes are allowed.
+            coupled = False
+            for i in range(index+1, Linv.shape[0]):
+                if Linv[index, i] != 0:
+                    coupled = True
+                    self.coordinate_modes[self.nodes[i]] = "charge"
+                    ch_indices.add(i)
+            if coupled:
+                self.coordinate_modes[self.nodes[index]] = "charge"
+            else:
+                self.coordinate_modes[self.nodes[index]] = "oscillator"
+            ch_indices.add(index)
+            index += 1
