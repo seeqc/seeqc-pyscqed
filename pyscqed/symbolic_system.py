@@ -6,7 +6,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 from .circuit_graph import CircuitGraph, CircuitGraphEdge
-from .parameters import ParamCollection
+from .parameter_collection import ParamCollection
 
 
 _DOF_PREFIX = ["\\Phi", "\\phi", "Q", "q"]

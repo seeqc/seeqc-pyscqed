@@ -4,7 +4,7 @@ import numpy as np
 import sympy as sy
 
 from pyscqed.sweeping import SweepConfig
-from pyscqed.parameters import ParamCollection
+from pyscqed.parameter_collection import ParamCollection
 
 
 def create_parameter_collection(names: list[str], values: list[float]) -> ParamCollection:

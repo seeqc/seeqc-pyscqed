@@ -6,7 +6,7 @@ import numpy as np
 import sympy as sy
 import graphviz as gv
 
-from pyscqed.parameters import ParamCollection
+from pyscqed.parameter_collection import ParamCollection
 
 
 def check_numerically_equal(Expr1, Expr2, n=100):

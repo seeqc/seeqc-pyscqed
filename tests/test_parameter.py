@@ -2,7 +2,7 @@ import pytest
 
 import numpy as np
 
-from pyscqed.parameters import Param
+from pyscqed.parameter import Param
 
 
 def test_parameter_creation_rules():

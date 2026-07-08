@@ -7,7 +7,7 @@ import sympy as sy
 from abc import abstractmethod
 from typing import TypeAlias, Generator, Any
 
-from .parameters import ParamCollection
+from .parameter_collection import ParamCollection
 from .evaluation_graph import EvaluationGraph
 from .util import pickleRead
 from .result import SweepNumericalResult, NumericalResult, EvaluationResult
