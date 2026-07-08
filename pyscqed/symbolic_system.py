@@ -17,10 +17,6 @@ class SymbolicSystem(ParamCollection):
         self,
         graph: CircuitGraph
     ) -> None:
-        """
-        """
-        
-        # Init the base class
         super().__init__([])
         
         # The CircuitGraph instance
