@@ -8,16 +8,14 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from .circuit_graph import CircuitGraph, CircuitGraphEdge
 from .parameters import ParamCollection
 
+
+_DOF_PREFIX = ["\\Phi", "\\phi", "Q", "q"]
+
+
 class SymbolicSystem(ParamCollection):
-    
-    # Mapping of the DoF structures
-    __dof_map = {'flux':0,'charge':1,'disp':2,'disp_adj':3}
-    
     def __init__(
         self,
-        graph: CircuitGraph,
-        dof_prefixes: list[str] = ["\\Phi", "\\phi", "Q", "q"],
-        quiet: bool = False
+        graph: CircuitGraph
     ) -> None:
         """
         """
@@ -50,10 +48,10 @@ class SymbolicSystem(ParamCollection):
         self.resonator_symbols_ind = {} # Inductive, keyed by edge
         
         # Assign degree of freedom prefixes
-        self.flux_prefix = dof_prefixes[0]
-        self.redflux_prefix = dof_prefixes[1]
-        self.charge_prefix = dof_prefixes[2]
-        self.redcharge_prefix = dof_prefixes[3]
+        self.flux_prefix = _DOF_PREFIX[0]
+        self.redflux_prefix = _DOF_PREFIX[1]
+        self.charge_prefix = _DOF_PREFIX[2]
+        self.redcharge_prefix = _DOF_PREFIX[3]
         
         # Flux and Charge bias terms
         self.flux_bias = {}
@@ -82,9 +80,6 @@ class SymbolicSystem(ParamCollection):
         
         # Get coordinate transformation matrices
         self._create_coordinate_transforms()
-        #if not quiet:
-        #    print("Optimal basis representations for the circuit coordinates:")
-        #    print(self.coordinate_modes)
         
         # Populate the degrees of freedom
         self._create_node_dofs()
@@ -606,7 +601,7 @@ class SymbolicSystem(ParamCollection):
         coupled_indices = {node: (nodes.index(n[0]), nodes.index(n[1])) for node, n in coupled_nodes.items()}
         
         # Get the new system matrices
-        SS = SymbolicSystem(CG, quiet=True)
+        SS = SymbolicSystem(CG)
         Cinv = SS.getInverseCapacitanceMatrix()
         Linv = SS.getInverseInductanceMatrix()
         
