@@ -117,12 +117,6 @@ class NumericalSystem(TempData):
         else:
             raise Exception("Unrecognized basis representation '%s'." % repr(basis))
 
-    def substitute(self) -> None:
-        """ Substitutes all current parameter values into the symbolic expressions, collecting
-        the numerical arrays into a :class:`~pyscqed.simulation_state._NumericalParts`
-        instance, and generates the expanded node operators. """
-        self.state.substitute(self.SS.getSymbolValuesDict())
-    
     # def getLinearPart(self) -> sy.Expr:
         # parts = self.state.numerical_parts
         # Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
@@ -190,7 +184,6 @@ class NumericalSystem(TempData):
     ###################################################################################################################
     
     def getHamiltonian(self) -> qt.Qobj:
-        parts = self.state.numerical_parts
         # U, Udag = self.state.circuit_operators.generateExpandedShiftingUnitaries(
             # parts.charge_bias_vector,
             # parts.inductive_flux_bias_vector,
@@ -198,28 +191,31 @@ class NumericalSystem(TempData):
         # )
         # Q = util.mdot(U, self.state.circuit_operators.charge_op_vector, Udag)
         # P = util.mdot(U, self.state.circuit_operators.flux_op_vector, Udag)
-        Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
-        P = self.state.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
+        Q = self.state.getBiasedChargeOperatorVector()
+        P = self.state.getBiasedFluxOperatorVector()
 
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
-        util.mdot(Q.T, parts.inverse_capacitance_matrix, Q)[0, 0]
+        util.mdot(Q.T, self.state.getInverseCapacitanceMatrix(), Q)[0, 0]
 
         # Get flux energy
         Hf = self.units.getPrefactor("El")*0.5*\
-        util.mdot(P.T, parts.inverse_inductance_matrix, P)[0, 0]
+        util.mdot(P.T, self.state.getInverseInductanceMatrix(), P)[0, 0]
 
         # Need the branch DoFs in the possibly transformed representation
         Pp = self.SS.Rnb*self.SS.Rinv*self.SS.node_vector
 
         # Get the Josephson energy
+        josephson_vector = self.state.getJosephsonVector()
+        positive_exponentials = self.state.getPositiveFluxBiasExponentials()
+        negative_exponentials = self.state.getNegativeFluxBiasExponentials()
         Hj = 0
         for i, edge in enumerate(self.SS.edges):
-            if parts.josephson_vector[i] == 0.0:
+            if josephson_vector[i] == 0.0:
                 continue
 
-            prod1 = parts.positive_flux_bias_exponentials[i]
-            prod2 = parts.negative_flux_bias_exponentials[i]
+            prod1 = positive_exponentials[i]
+            prod2 = negative_exponentials[i]
             if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
                 # Left
                 for arg in Pp[i].args:
@@ -245,15 +241,13 @@ class NumericalSystem(TempData):
                     prod1 *= self.getOperator(node, "disp_adj")
                     prod2 *= self.getOperator(node, "disp")
         
-            Hj += -0.5*parts.josephson_vector[i]*(prod1 + prod2)
+            Hj += -0.5*josephson_vector[i]*(prod1 + prod2)
         Hj *= self.units.getPrefactor("Ej")
 
         # Total Hamiltonian
         return (Hq + Hf + Hj).tidyup(_qobj_atol)
     
     def getCurrentOperator(self, edge: CircuitGraphEdge | None = None) -> qt.Qobj:
-        parts = self.state.numerical_parts
-
         # Check edge
         if edge is None:
             raise Exception("No edge specified for branch current operator.")
@@ -278,13 +272,13 @@ class NumericalSystem(TempData):
             
             # Take difference of node fluxes of corresponding branch and use *branch* inverse inductance matrix
             return self.units.getPrefactor("IopL") * sum1 * \
-                parts.branch_inverse_inductance_matrix[i, i]
-        
+                self.state.getBranchInverseInductanceMatrix()[i, i]
+
         elif self.getCircuitGraph().isJosephsonEdge(edge):
-            
+
             # Get the Josephson operators
-            prod1 = parts.positive_flux_bias_exponentials[i]
-            prod2 = parts.negative_flux_bias_exponentials[i]
+            prod1 = self.state.getPositiveFluxBiasExponentials()[i]
+            prod2 = self.state.getNegativeFluxBiasExponentials()[i]
             if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
                 # Left
                 for arg in Pp[i].args:
@@ -311,7 +305,7 @@ class NumericalSystem(TempData):
                     prod2 *= self.getOperator(node, "disp")
         
             return 0.5j * self.units.getPrefactor("IopJ") * \
-                parts.josephson_vector[i] * (prod1 - prod2)
+                self.state.getJosephsonVector()[i] * (prod1 - prod2)
         else:
             raise Exception("Edge %s is not current-carrying" % repr(edge))
     
@@ -343,12 +337,11 @@ class NumericalSystem(TempData):
         i = self.getNodeIndex(node)
         
         # Get charge superoperator including charge offsets
-        parts = self.state.numerical_parts
-        Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
+        Q = self.state.getBiasedChargeOperatorVector()
 
         # Use the inverse capacitance matrix
         return self.units.getPrefactor("Vop") * Q[i, 0] * \
-            parts.inverse_capacitance_matrix[i, i]
+            self.state.getInverseCapacitanceMatrix()[i, i]
     
     def getVoltageMatrixElement(
         self,
@@ -370,7 +363,7 @@ class NumericalSystem(TempData):
         return result
     
     def getChargingEnergies(self, node: int | None = None) -> dict[int, float] | float:
-        Cinv = self.state.numerical_parts.inverse_capacitance_matrix
+        Cinv = self.state.getInverseCapacitanceMatrix()
         if node is None:
             ret = {}
             for i, pos in enumerate(self.getNodeList()):
@@ -381,7 +374,7 @@ class NumericalSystem(TempData):
             return 0.5 * Cinv[i, i] * self.units.getPrefactor("Ec")
     
     def getFluxEnergies(self, node: int | None = None) -> dict[int, float] | float:
-        Linv = self.state.numerical_parts.inverse_inductance_matrix
+        Linv = self.state.getInverseInductanceMatrix()
         if node is None:
             ret = {}
             for i, pos in enumerate(self.getNodeList()):
@@ -392,7 +385,7 @@ class NumericalSystem(TempData):
             return 0.5 * Linv[i, i] * self.units.getPrefactor("El")
     
     def getJosephsonEnergies(self, edge: CircuitGraphEdge | None = None) -> dict[CircuitGraphEdge, float] | float:
-        Jvec = self.state.numerical_parts.josephson_vector
+        Jvec = self.state.getJosephsonVector()
         if edge is None:
             ret = {}
             for i, edge in enumerate(self.SS.edges):
@@ -423,8 +416,7 @@ class NumericalSystem(TempData):
         
         # Get the operator associated with selected node
         index = self.getNodeList().index(cpl_node)
-        Op = self.state.circuit_operators.charge_op_vector[index, 0] + \
-            self.state.numerical_parts.charge_bias_vector[index, 0]
+        Op = self.state.getBiasedChargeOperatorVector()[index, 0]
         
         # Get coupling terms
         E = energies.data - energies.data[0]
@@ -510,7 +502,7 @@ class NumericalSystem(TempData):
         assert all(value is not None for value in params.values()), \
                "Some parameters do not have valid values. All parameters should be set first with the " \
                "setParameterValues function in one go."
-        self.substitute()
+        self.state.substitute(self.SS.getSymbolValuesDict())
     
     ## Get the value of a parameter.
     def getParameterValue(self, name: str) -> float:
@@ -522,7 +514,7 @@ class NumericalSystem(TempData):
         params = self.getParameterValuesDict()
         assert all(value is not None for value in params.values()), "Not all parameters were set in this call. " \
                f"The missing parameters are {repr([name for name, value in params.items() if value is None])}"
-        self.substitute()
+        self.state.substitute(self.SS.getSymbolValuesDict())
     
     ## Get many parameter values.
     def getParameterValues(self, *names: str) -> dict[str, float]:

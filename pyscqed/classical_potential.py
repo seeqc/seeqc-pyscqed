@@ -15,7 +15,7 @@ class ClassicalPotentialBuilder:
         self._dof_map = {}
         self._critical_currents = self._hamil.getPrefactor('Ej') * self._get_critical_currents()
         self._inverse_inductance_matrix = 0.5 * hamil.getPrefactor('El') * \
-            self._hamil.state.numerical_parts.inverse_inductance_matrix
+            self._hamil.state.getInverseInductanceMatrix()
         self._dof_symbol_vector = self._hamil.SS.getFluxVector(mode="branch") + \
                                  self._hamil.SS.getFluxBiasVector(mode="branch")
         self._get_input_format()

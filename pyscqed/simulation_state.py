@@ -264,6 +264,42 @@ class SimulationState:
         """
         return self.circuit_operators[node][kind]
 
+    def getBiasedChargeOperatorVector(self) -> np.ndarray:
+        """ Returns the node charge operator vector including the charge bias offsets. """
+        return (self.circuit_operators.charge_op_vector
+                + self.numerical_parts.charge_bias_vector)
+
+    def getBiasedFluxOperatorVector(self) -> np.ndarray:
+        """ Returns the node flux operator vector including the inductive flux bias
+        offsets. """
+        return (self.circuit_operators.flux_op_vector
+                + self.numerical_parts.inductive_flux_bias_vector)
+
+    def getInverseCapacitanceMatrix(self) -> np.ndarray:
+        """ Returns the numerical inverse capacitance matrix. """
+        return self.numerical_parts.inverse_capacitance_matrix
+
+    def getInverseInductanceMatrix(self) -> np.ndarray:
+        """ Returns the numerical inverse inductance matrix. """
+        return self.numerical_parts.inverse_inductance_matrix
+
+    def getBranchInverseInductanceMatrix(self) -> np.ndarray:
+        """ Returns the numerical branch inverse inductance matrix used for branch
+        current calculations. """
+        return self.numerical_parts.branch_inverse_inductance_matrix
+
+    def getJosephsonVector(self) -> np.ndarray:
+        """ Returns the numerical Josephson energy vector. """
+        return self.numerical_parts.josephson_vector
+
+    def getPositiveFluxBiasExponentials(self) -> list[np.complex128]:
+        """ Returns the positively signed exponentiated branch flux bias terms. """
+        return self.numerical_parts.positive_flux_bias_exponentials
+
+    def getNegativeFluxBiasExponentials(self) -> list[np.complex128]:
+        """ Returns the negatively signed exponentiated branch flux bias terms. """
+        return self.numerical_parts.negative_flux_bias_exponentials
+
     def getHilbertSpaceSize(self) -> int:
         """ Returns the total Hilbert space size considering all currently defined
         operator truncations. """

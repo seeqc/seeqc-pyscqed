@@ -37,6 +37,20 @@ def get_initialized_symbolic_system() -> SymbolicSystem:
     return symbolic
 
 
+def get_substituted_state() -> SimulationState:
+    symbolic = get_initialized_symbolic_system()
+    state = SimulationState(symbolic)
+    state.setNodeOperators(1, ChargeBasisOperators(1, 3))
+    state.substitute(symbolic.getSymbolValuesDict())
+    return state
+
+
+def assert_qobj_vector_equal(actual: np.ndarray, expected: np.ndarray) -> None:
+    assert actual.shape == expected.shape
+    for i in range(expected.shape[0]):
+        assert (actual[i, 0] - expected[i, 0]).norm() == pytest.approx(0.0)
+
+
 SYMBOLIC_PART_ATTRIBUTES = [
     "inverse_capacitance_matrix",
     "inverse_inductance_matrix",
@@ -121,6 +135,34 @@ def test_simulation_state_substitutions():
 
     state.substituteSwept({k: v for k, v in subs.items() if k != C})
     assert isinstance(state.numerical_parts, _NumericalParts)
+
+
+def test_simulation_state_biased_charge_operator_vector():
+    state = get_substituted_state()
+    expected = (state.circuit_operators.charge_op_vector
+                + state.numerical_parts.charge_bias_vector)
+    assert_qobj_vector_equal(state.getBiasedChargeOperatorVector(), expected)
+
+
+def test_simulation_state_biased_flux_operator_vector():
+    state = get_substituted_state()
+    expected = (state.circuit_operators.flux_op_vector
+                + state.numerical_parts.inductive_flux_bias_vector)
+    assert_qobj_vector_equal(state.getBiasedFluxOperatorVector(), expected)
+
+
+def test_simulation_state_numerical_part_getters():
+    state = get_substituted_state()
+    parts = state.numerical_parts
+    assert state.getInverseCapacitanceMatrix() is parts.inverse_capacitance_matrix
+    assert state.getInverseInductanceMatrix() is parts.inverse_inductance_matrix
+    assert state.getBranchInverseInductanceMatrix() is \
+        parts.branch_inverse_inductance_matrix
+    assert state.getJosephsonVector() is parts.josephson_vector
+    assert state.getPositiveFluxBiasExponentials() is \
+        parts.positive_flux_bias_exponentials
+    assert state.getNegativeFluxBiasExponentials() is \
+        parts.negative_flux_bias_exponentials
 
 
 def test_simulation_state_hilbert_space_size():
@@ -281,7 +323,7 @@ def test_numerical_system_substitute_populates_numerical_parts():
     hamil = NumericalSystem(get_symbolic_system())
     hamil.configureOperator(1, 40, "charge")
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
-    hamil.substitute()
+    hamil.state.substitute(hamil.SS.getSymbolValuesDict())
     assert isinstance(hamil.state.numerical_parts, _NumericalParts)
 
 
