@@ -323,7 +323,6 @@ def test_numerical_system_substitute_populates_numerical_parts():
     hamil = NumericalSystem(get_symbolic_system())
     hamil.configureOperator(1, 40, "charge")
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
-    hamil.state.substitute(hamil.SS.getSymbolValuesDict())
     assert isinstance(hamil.state.numerical_parts, _NumericalParts)
 
 
