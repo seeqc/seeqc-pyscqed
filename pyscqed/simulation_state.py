@@ -187,6 +187,29 @@ class CircuitOperators:
         self.charge_op_vector = self._collect_operator_vector("charge")
         self.flux_op_vector = self._collect_operator_vector("flux")
 
+    def generateExpandedShiftingUnitaries(
+        self,
+        charge_bias_vector: np.ndarray,
+        flux_bias_vector: np.ndarray,
+        units: Units
+    ) -> np.ndarray:
+        Ilist = [self._operator_data[node].getIdentity() for node in self._node_list]
+        vector1 = np.empty((len(self._node_list), 1), dtype=object)
+        vector2 = np.empty((len(self._node_list), 1), dtype=object)
+        for i, node in enumerate(self._node_list):
+            ops = self._operator_data[node]
+            flux_value = flux_bias_vector[i, 0]
+            #bounded_flux_value = flux_value % np.sign(flux_value) if flux_value != 0.0 else 0.0
+            #U = (1j * (ops.Q * bounded_flux_value * 2 * np.pi + ops.P * charge_bias_vector[i, 0])).expm()
+            #U = (1j * (ops.Q * (flux_value % 1.0) * 2 * np.pi + ops.P * charge_bias_vector[i, 0])).expm()
+            U = (1j * (ops.Q * flux_value * 2 * np.pi + ops.P * charge_bias_vector[i, 0])).expm()
+            Olist = list(Ilist)
+            Olist[i] = U
+            vector1[i, 0] = qt.tensor(Olist)
+            Olist[i] = U.dag()
+            vector2[i, 0] = qt.tensor(Olist)
+        return vector1, vector2
+
     def _collect_operator_vector(self, key: str) -> np.ndarray:
         vector = np.empty((len(self._node_list), 1), dtype=object)
         for i, node in enumerate(self._node_list):

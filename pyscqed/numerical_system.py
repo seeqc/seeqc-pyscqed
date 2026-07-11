@@ -123,67 +123,67 @@ class NumericalSystem(TempData):
         instance, and generates the expanded node operators. """
         self.state.substitute(self.SS.getSymbolValuesDict())
     
-    def getLinearPart(self) -> sy.Expr:
-        parts = self.state.numerical_parts
-        Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
-        P = self.state.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
+    # def getLinearPart(self) -> sy.Expr:
+        # parts = self.state.numerical_parts
+        # Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
+        # P = self.state.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
 
-        # Get charging energy
-        Hq = self.units.getPrefactor("Ec")*0.5*\
-        util.mdot(Q.T, parts.inverse_capacitance_matrix, Q)[0, 0]
+        # # Get charging energy
+        # Hq = self.units.getPrefactor("Ec")*0.5*\
+        # util.mdot(Q.T, parts.inverse_capacitance_matrix, Q)[0, 0]
 
-        # Get flux energy
-        Hf = self.units.getPrefactor("El")*0.5*\
-        util.mdot(P.T, parts.inverse_inductance_matrix, P)[0, 0]
+        # # Get flux energy
+        # Hf = self.units.getPrefactor("El")*0.5*\
+        # util.mdot(P.T, parts.inverse_inductance_matrix, P)[0, 0]
 
-        return Hq + Hf
+        # return Hq + Hf
     
-    def getStaticJosephsonPart(self) -> tuple[list[qt.Qobj], list[qt.Qobj]]:
-        Jvec = self.state.numerical_parts.josephson_vector
+    # def getStaticJosephsonPart(self) -> tuple[list[qt.Qobj], list[qt.Qobj]]:
+        # Jvec = self.state.numerical_parts.josephson_vector
 
-        # Need the branch DoFs in the possibly transformed representation
-        Pp = self.SS.Rnb*self.SS.Rinv*self.SS.node_vector
+        # # Need the branch DoFs in the possibly transformed representation
+        # Pp = self.SS.Rnb*self.SS.Rinv*self.SS.node_vector
 
-        # Get the Josephson energy
-        Hj_l = []
-        Hj_r = []
-        for i, edge in enumerate(self.SS.edges):
-            if Jvec[i] == 0.0:
-                continue
-            prod1 = 0.0
-            prod2 = 0.0
-            if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
-                prod1 = 1.0
-                prod2 = 1.0
-                # Left
-                for arg in Pp[i].args:
-                    node = self.SS.node_map_rev[arg.args[1]]
-                    if arg.args[0] > 0:
-                        prod1 *= self.getOperator(node, "disp")
-                    else:
-                        prod1 *= self.getOperator(node, "disp_adj")
+        # # Get the Josephson energy
+        # Hj_l = []
+        # Hj_r = []
+        # for i, edge in enumerate(self.SS.edges):
+            # if Jvec[i] == 0.0:
+                # continue
+            # prod1 = 0.0
+            # prod2 = 0.0
+            # if len(Pp[i].atoms()) > 2: # Case where there is sum of elements
+                # prod1 = 1.0
+                # prod2 = 1.0
+                # # Left
+                # for arg in Pp[i].args:
+                    # node = self.SS.node_map_rev[arg.args[1]]
+                    # if arg.args[0] > 0:
+                        # prod1 *= self.getOperator(node, "disp")
+                    # else:
+                        # prod1 *= self.getOperator(node, "disp_adj")
                 
-                # Right
-                for arg in Pp[i].args:
-                    node = self.SS.node_map_rev[arg.args[1]]
-                    if arg.args[0] < 0:
-                        prod2 *= self.getOperator(node, "disp")
-                    else:
-                        prod2 *= self.getOperator(node, "disp_adj")
-            else:
-                prod1 = 1.0
-                prod2 = 1.0
-                node = self.SS.node_map_rev[Pp[i].args[1]]
-                if Pp[i].args[0] > 0:
-                    prod1 *= self.getOperator(node, "disp")
-                    prod2 *= self.getOperator(node, "disp_adj")
-                else:
-                    prod1 *= self.getOperator(node, "disp_adj")
-                    prod2 *= self.getOperator(node, "disp")
+                # # Right
+                # for arg in Pp[i].args:
+                    # node = self.SS.node_map_rev[arg.args[1]]
+                    # if arg.args[0] < 0:
+                        # prod2 *= self.getOperator(node, "disp")
+                    # else:
+                        # prod2 *= self.getOperator(node, "disp_adj")
+            # else:
+                # prod1 = 1.0
+                # prod2 = 1.0
+                # node = self.SS.node_map_rev[Pp[i].args[1]]
+                # if Pp[i].args[0] > 0:
+                    # prod1 *= self.getOperator(node, "disp")
+                    # prod2 *= self.getOperator(node, "disp_adj")
+                # else:
+                    # prod1 *= self.getOperator(node, "disp_adj")
+                    # prod2 *= self.getOperator(node, "disp")
         
-            Hj_l.append(-0.5*self.units.getPrefactor("Ej")*Jvec[i]*prod1)
-            Hj_r.append(-0.5*self.units.getPrefactor("Ej")*Jvec[i]*prod2)
-        return Hj_l, Hj_r
+            # Hj_l.append(-0.5*self.units.getPrefactor("Ej")*Jvec[i]*prod1)
+            # Hj_r.append(-0.5*self.units.getPrefactor("Ej")*Jvec[i]*prod2)
+        # return Hj_l, Hj_r
     
     ###################################################################################################################
     #       Evaluables
@@ -191,6 +191,13 @@ class NumericalSystem(TempData):
     
     def getHamiltonian(self) -> qt.Qobj:
         parts = self.state.numerical_parts
+        # U, Udag = self.state.circuit_operators.generateExpandedShiftingUnitaries(
+            # parts.charge_bias_vector,
+            # parts.inductive_flux_bias_vector,
+            # self.units
+        # )
+        # Q = util.mdot(U, self.state.circuit_operators.charge_op_vector, Udag)
+        # P = util.mdot(U, self.state.circuit_operators.flux_op_vector, Udag)
         Q = self.state.circuit_operators.charge_op_vector + parts.charge_bias_vector
         P = self.state.circuit_operators.flux_op_vector + parts.inductive_flux_bias_vector
 
