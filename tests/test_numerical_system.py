@@ -7,7 +7,7 @@ from pyscqed.circuit_graph import CircuitGraph
 from pyscqed.symbolic_system import SymbolicSystem
 from pyscqed.numerical_system import NumericalSystem
 from pyscqed.evaluation_graph import EvaluationGraph
-from pyscqed.physical_constants import hbar, phi0
+from pyscqed.physical_constants import hbar, phi0, e
 from pyscqed.util import mdot
 
 
@@ -441,6 +441,7 @@ def test_spectrum_bias_independence():
     # Statically biasing the loop should only create an energy offset and not
     # affect the energy spectrum
     graph.addFluxBias("L1", "Z")
+    graph.addChargeBias(1, "X")
     circuit = SymbolicSystem(graph)
 
     # Calculate expected resonant frequency
@@ -453,11 +454,12 @@ def test_spectrum_bias_independence():
         "L1", 2 * L * 1e12,
         "L2", 2 * L * 1e12,
         "C", C * 1e15,
-        "phiZ", 0.0
+        "phiZ", 0.0,
+        "QX", 0.0
     )
 
-    # Calculate expected energy offset
-    phase_offset = 1.0
+    # Calculate expected flux energy offset
+    phase_offset = 1.0  # phi0
     energy_offset = (phase_offset * phi0)**2 / (2 * L * hbar * 2 * np.pi) * 1e-9
 
     E1, V1 = hamil.getHamiltonian().eigenstates()
@@ -474,5 +476,22 @@ def test_spectrum_bias_independence():
 
     # To get the energy offset term, we must construct the Hamiltonian without the basis shifting
     H = get_linear_hamiltonian(hamil, basis_transform=False)
+    assert np.isclose(qt.expect(H, V1[0]) - E1[0], energy_offset, atol=1e-5, rtol=0)
 
+    # Calculate expected charge energy offset
+    charge_offset = 1.0  # 2e
+    energy_offset = (charge_offset * 2 * e)**2 / (2 * C * hbar * 2 * np.pi) * 1e-9
+
+    # The same is true for charge offsets
+    hamil.setParameterValues(
+        "phiZ", 0.0,
+        "QX", charge_offset
+    )
+
+    H = hamil.getHamiltonian()
+    E3 = H.eigenenergies()
+    assert np.isclose(E3[1] - E3[0], expected_frequency, atol=1e-5, rtol=0)
+    assert np.isclose(E3[2] - E3[1], expected_frequency, atol=1e-5, rtol=0)
+
+    H = get_linear_hamiltonian(hamil, basis_transform=False)
     assert np.isclose(qt.expect(H, V1[0]) - E1[0], energy_offset, atol=1e-5, rtol=0)
