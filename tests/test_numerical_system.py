@@ -431,7 +431,8 @@ def test_oscillator_parameters_are_consistent_independent_of_operator_basis():
     assert np.isclose(fder, f, atol=2e1, rtol=0)
 
 
-def test_spectrum_bias_independence():
+@pytest.mark.parametrize("basis", ["oscillator", "charge"])
+def test_spectrum_bias_independence(basis):
     # Linear resonator with two parallel inductors forming a loop
     graph = CircuitGraph()
     graph.addBranch(0, 1, "C")
@@ -449,7 +450,7 @@ def test_spectrum_bias_independence():
     C = 1200.0e-15  # F
     expected_frequency = 1 / np.sqrt(L * C) / 2 / np.pi * 1e-9  # GHz
     hamil = NumericalSystem(circuit)
-    hamil.configureOperator(1, 60, "oscillator")
+    hamil.configureOperator(1, 60, basis)
     hamil.setParameterValues(
         "L1", 2 * L * 1e12,
         "L2", 2 * L * 1e12,
