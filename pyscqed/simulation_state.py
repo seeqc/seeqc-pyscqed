@@ -201,9 +201,6 @@ class CircuitOperators:
         for i, node in enumerate(self._node_list):
             ops = self._operator_data[node]
             flux_value = flux_bias_vector[i, 0]
-            #bounded_flux_value = flux_value % np.sign(flux_value) if flux_value != 0.0 else 0.0
-            #U = (1j * (ops.Q * bounded_flux_value * 2 * np.pi + ops.P * charge_bias_vector[i, 0])).expm()
-            #U = (1j * (ops.Q * (flux_value % 1.0) * 2 * np.pi + ops.P * charge_bias_vector[i, 0])).expm()
             U = (1j * (ops.Q * flux_value * 2 * np.pi + ops.P * charge_bias_vector[i, 0])).expm()
             Olist = list(Ilist)
             Olist[i] = U
