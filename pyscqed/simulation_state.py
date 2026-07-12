@@ -7,6 +7,7 @@ from .operators import NodeOperators
 from .symbolic_system import SymbolicSystem
 from .units import Units
 from . import physical_constants as pc
+from . import util
 
 
 class _SymbolicPartsBase:
@@ -190,8 +191,7 @@ class CircuitOperators:
     def generateExpandedShiftingUnitaries(
         self,
         charge_bias_vector: np.ndarray,
-        flux_bias_vector: np.ndarray,
-        units: Units
+        flux_bias_vector: np.ndarray
     ) -> np.ndarray:
         Ilist = [self._operator_data[node].getIdentity() for node in self._node_list]
         vector1 = np.empty((len(self._node_list), 1), dtype=object)
@@ -266,14 +266,24 @@ class SimulationState:
 
     def getBiasedChargeOperatorVector(self) -> np.ndarray:
         """ Returns the node charge operator vector including the charge bias offsets. """
-        return (self.circuit_operators.charge_op_vector
-                + self.numerical_parts.charge_bias_vector)
+        U, Udag = self.circuit_operators.generateExpandedShiftingUnitaries(
+            self.numerical_parts.charge_bias_vector,
+            self.numerical_parts.inductive_flux_bias_vector
+        )
+        Q = util.mdot(U, self.circuit_operators.charge_op_vector, Udag)
+        P = util.mdot(U, self.circuit_operators.flux_op_vector, Udag)
+        return Q
 
     def getBiasedFluxOperatorVector(self) -> np.ndarray:
         """ Returns the node flux operator vector including the inductive flux bias
         offsets. """
-        return (self.circuit_operators.flux_op_vector
-                + self.numerical_parts.inductive_flux_bias_vector)
+        U, Udag = self.circuit_operators.generateExpandedShiftingUnitaries(
+            self.numerical_parts.charge_bias_vector,
+            self.numerical_parts.inductive_flux_bias_vector
+        )
+        Q = util.mdot(U, self.circuit_operators.charge_op_vector, Udag)
+        P = util.mdot(U, self.circuit_operators.flux_op_vector, Udag)
+        return P
 
     def getInverseCapacitanceMatrix(self) -> np.ndarray:
         """ Returns the numerical inverse capacitance matrix. """

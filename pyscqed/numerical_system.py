@@ -184,13 +184,6 @@ class NumericalSystem(TempData):
     ###################################################################################################################
     
     def getHamiltonian(self) -> qt.Qobj:
-        # U, Udag = self.state.circuit_operators.generateExpandedShiftingUnitaries(
-            # parts.charge_bias_vector,
-            # parts.inductive_flux_bias_vector,
-            # self.units
-        # )
-        # Q = util.mdot(U, self.state.circuit_operators.charge_op_vector, Udag)
-        # P = util.mdot(U, self.state.circuit_operators.flux_op_vector, Udag)
         Q = self.state.getBiasedChargeOperatorVector()
         P = self.state.getBiasedFluxOperatorVector()
 

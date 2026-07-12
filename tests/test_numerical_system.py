@@ -1,11 +1,14 @@
 import pytest
 
+import qutip as qt
 import numpy as np
 
 from pyscqed.circuit_graph import CircuitGraph
 from pyscqed.symbolic_system import SymbolicSystem
 from pyscqed.numerical_system import NumericalSystem
 from pyscqed.evaluation_graph import EvaluationGraph
+from pyscqed.physical_constants import hbar, phi0
+from pyscqed.util import mdot
 
 
 def get_single_node_graph() -> CircuitGraph:
@@ -55,6 +58,28 @@ def get_resonator(operator_basis: str) -> NumericalSystem:
         "C", 150.0
     )
     return hamil
+
+
+# TODO: Should this be a patch of `getHamiltonian`?
+def get_linear_hamiltonian(hamil: NumericalSystem, basis_transform: bool) -> qt.Qobj:
+    if basis_transform:
+        Q = hamil.state.getBiasedChargeOperatorVector()
+        P = hamil.state.getBiasedFluxOperatorVector()
+    else:
+        Q = (hamil.state.circuit_operators.charge_op_vector
+             + hamil.state.numerical_parts.charge_bias_vector)
+        P = (hamil.state.circuit_operators.flux_op_vector
+             + hamil.state.numerical_parts.inductive_flux_bias_vector)
+
+    # Get charging energy
+    Hq = hamil.units.getPrefactor("Ec")*0.5*\
+    mdot(Q.T, hamil.state.getInverseCapacitanceMatrix(), Q)[0, 0]
+
+    # Get flux energy
+    Hf = hamil.units.getPrefactor("El")*0.5*\
+    mdot(P.T, hamil.state.getInverseInductanceMatrix(), P)[0, 0]
+    
+    return Hq + Hf
 
 
 def test_sweep_one_dimension():
@@ -404,3 +429,50 @@ def test_oscillator_parameters_are_consistent_independent_of_operator_basis():
 
     assert np.isclose(Zder, Z, atol=1e-5, rtol=0)
     assert np.isclose(fder, f, atol=2e1, rtol=0)
+
+
+def test_spectrum_bias_independence():
+    # Linear resonator with two parallel inductors forming a loop
+    graph = CircuitGraph()
+    graph.addBranch(0, 1, "C")
+    graph.addBranch(0, 1, "L1")
+    graph.addBranch(0, 1, "L2")
+
+    # Statically biasing the loop should only create an energy offset and not
+    # affect the energy spectrum
+    graph.addFluxBias("L1", "Z")
+    circuit = SymbolicSystem(graph)
+
+    # Calculate expected resonant frequency
+    L = 500.0e-12  # H
+    C = 1200.0e-15  # F
+    expected_frequency = 1 / np.sqrt(L * C) / 2 / np.pi * 1e-9  # GHz
+    hamil = NumericalSystem(circuit)
+    hamil.configureOperator(1, 60, "oscillator")
+    hamil.setParameterValues(
+        "L1", 2 * L * 1e12,
+        "L2", 2 * L * 1e12,
+        "C", C * 1e15,
+        "phiZ", 0.0
+    )
+
+    # Calculate expected energy offset
+    phase_offset = 1.0
+    energy_offset = (phase_offset * phi0)**2 / (2 * L * hbar * 2 * np.pi) * 1e-9
+
+    E1, V1 = hamil.getHamiltonian().eigenstates()
+    assert np.isclose(E1[1] - E1[0], expected_frequency, atol=1e-5, rtol=0)
+    assert np.isclose(E1[2] - E1[1], expected_frequency, atol=1e-5, rtol=0)
+
+    # Appying a bias creates an energy offset LI^2/2 == phi^2/2L
+    hamil.setParameterValue("phiZ", phase_offset)
+
+    H = hamil.getHamiltonian()
+    E2 = H.eigenenergies()
+    assert np.isclose(E2[1] - E2[0], expected_frequency, atol=1e-5, rtol=0)
+    assert np.isclose(E2[2] - E2[1], expected_frequency, atol=1e-5, rtol=0)
+
+    # To get the energy offset term, we must construct the Hamiltonian without the basis shifting
+    H = get_linear_hamiltonian(hamil, basis_transform=False)
+
+    assert np.isclose(qt.expect(H, V1[0]) - E1[0], energy_offset, atol=1e-5, rtol=0)
