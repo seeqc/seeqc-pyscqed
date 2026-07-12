@@ -118,6 +118,7 @@ class CircuitOperators:
         self._circ_operators = {}
         self.charge_op_vector = None
         self.flux_op_vector = None
+        self.generation = 0
 
     def __getitem__(self, node: int) -> dict[str, qt.Qobj]:
         """ Returns the expanded operator dictionary of the given node. """
@@ -187,12 +188,13 @@ class CircuitOperators:
         # Collect the operator vectors in node order
         self.charge_op_vector = self._collect_operator_vector("charge")
         self.flux_op_vector = self._collect_operator_vector("flux")
+        self.generation += 1
 
     def generateExpandedShiftingUnitaries(
         self,
         charge_bias_vector: np.ndarray,
         flux_bias_vector: np.ndarray
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, np.ndarray]:
         Ilist = [self._operator_data[node].getIdentity() for node in self._node_list]
         vector1 = np.empty((len(self._node_list), 1), dtype=object)
         vector2 = np.empty((len(self._node_list), 1), dtype=object)
@@ -255,6 +257,7 @@ class SimulationState:
         self.symbolic_parts = _SymbolicParts(symbolic_system)
         self.mixed_parts: _MixedParts | None = None
         self.numerical_parts: _NumericalParts | None = None
+        self._shifting_cache = None
 
     def getOperator(self, node: int, kind: str) -> qt.Qobj:
         """ Returns the operator ``kind`` of the given node, expanded into the circuit
@@ -264,24 +267,37 @@ class SimulationState:
         """
         return self.circuit_operators[node][kind]
 
+    def _getShiftingUnitaries(self) -> tuple[np.ndarray, np.ndarray]:
+        # Regenerate the shifting unitaries only when the charge or inductive flux bias
+        # vectors change value, or when the node operators they are built from have been
+        # regenerated (tracked by the operator generation counter).
+        charge_bias = self.numerical_parts.charge_bias_vector
+        flux_bias = self.numerical_parts.inductive_flux_bias_vector
+        generation = self.circuit_operators.generation
+        if self._shifting_cache is not None:
+            cached_generation, cached_charge, cached_flux, U, Udag = self._shifting_cache
+            if (cached_generation == generation
+                    and np.array_equal(cached_charge, charge_bias)
+                    and np.array_equal(cached_flux, flux_bias)):
+                return U, Udag
+        U, Udag = self.circuit_operators.generateExpandedShiftingUnitaries(
+            charge_bias, flux_bias
+        )
+        self._shifting_cache = (
+            generation, charge_bias.copy(), flux_bias.copy(), U, Udag
+        )
+        return U, Udag
+
     def getBiasedChargeOperatorVector(self) -> np.ndarray:
         """ Returns the node charge operator vector including the charge bias offsets. """
-        U, Udag = self.circuit_operators.generateExpandedShiftingUnitaries(
-            self.numerical_parts.charge_bias_vector,
-            self.numerical_parts.inductive_flux_bias_vector
-        )
+        U, Udag = self._getShiftingUnitaries()
         Q = util.mdot(U, self.circuit_operators.charge_op_vector, Udag)
-        P = util.mdot(U, self.circuit_operators.flux_op_vector, Udag)
         return Q
 
     def getBiasedFluxOperatorVector(self) -> np.ndarray:
         """ Returns the node flux operator vector including the inductive flux bias
         offsets. """
-        U, Udag = self.circuit_operators.generateExpandedShiftingUnitaries(
-            self.numerical_parts.charge_bias_vector,
-            self.numerical_parts.inductive_flux_bias_vector
-        )
-        Q = util.mdot(U, self.circuit_operators.charge_op_vector, Udag)
+        U, Udag = self._getShiftingUnitaries()
         P = util.mdot(U, self.circuit_operators.flux_op_vector, Udag)
         return P
 

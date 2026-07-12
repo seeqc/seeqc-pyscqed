@@ -440,3 +440,82 @@ def test_numerical_system_holds_circuit_operators():
     hamil.setParameterValues("C", 20.0, "I", 40e-3, "L", 50.0)
     for kind in ("charge", "flux", "disp", "disp_adj"):
         assert isinstance(hamil.getOperator(1, kind), qt.Qobj)
+
+
+def test_simulation_state_shifting_unitaries_cached_when_bias_unchanged():
+    state = get_substituted_state()
+    U1, Udag1 = state._getShiftingUnitaries()
+
+    # A second call with nothing changed reuses the cached unitaries
+    U2, Udag2 = state._getShiftingUnitaries()
+    assert U2 is U1
+    assert Udag2 is Udag1
+
+
+def test_simulation_state_shifting_unitaries_cached_when_bias_value_unchanged():
+    state = get_substituted_state()
+    U1, Udag1 = state._getShiftingUnitaries()
+
+    # New array objects carrying identical values must not trigger regeneration:
+    # the cache compares bias vectors by value, not by identity
+    state.numerical_parts.charge_bias_vector = \
+        state.numerical_parts.charge_bias_vector.copy()
+    state.numerical_parts.inductive_flux_bias_vector = \
+        state.numerical_parts.inductive_flux_bias_vector.copy()
+    U2, Udag2 = state._getShiftingUnitaries()
+    assert U2 is U1
+    assert Udag2 is Udag1
+
+
+def test_simulation_state_shifting_unitaries_regenerated_when_charge_bias_changes():
+    state = get_substituted_state()
+    U1, Udag1 = state._getShiftingUnitaries()
+
+    # Changing the charge bias value invalidates the cache
+    state.numerical_parts.charge_bias_vector = \
+        state.numerical_parts.charge_bias_vector + 1.0
+    U2, Udag2 = state._getShiftingUnitaries()
+    assert U2 is not U1
+    assert Udag2 is not Udag1
+
+
+def test_simulation_state_shifting_unitaries_regenerated_when_flux_bias_changes():
+    state = get_substituted_state()
+    U1, Udag1 = state._getShiftingUnitaries()
+
+    # Changing the inductive flux bias value invalidates the cache
+    state.numerical_parts.inductive_flux_bias_vector = \
+        state.numerical_parts.inductive_flux_bias_vector + 1.0
+    U2, Udag2 = state._getShiftingUnitaries()
+    assert U2 is not U1
+    assert Udag2 is not Udag1
+
+
+def test_simulation_state_shifting_unitaries_regenerated_when_operators_regenerate():
+    state = get_substituted_state()
+    U1, _ = state._getShiftingUnitaries()
+
+    # Regenerating the node operators bumps the generation counter, invalidating
+    # the cache even though the bias vectors are unchanged
+    state.circuit_operators.generateExpandedOperators()
+    U2, _ = state._getShiftingUnitaries()
+    assert U2 is not U1
+
+
+def test_simulation_state_biased_getters_share_shifting_unitary_cache(monkeypatch):
+    state = get_substituted_state()
+
+    calls = []
+    original = state.circuit_operators.generateExpandedShiftingUnitaries
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        state.circuit_operators, "generateExpandedShiftingUnitaries", counting)
+
+    # The two getters getHamiltonian calls back to back build the unitaries once
+    state.getBiasedChargeOperatorVector()
+    state.getBiasedFluxOperatorVector()
+    assert len(calls) == 1
