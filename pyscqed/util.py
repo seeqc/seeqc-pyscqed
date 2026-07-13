@@ -23,6 +23,23 @@ def mdot(*args):
         res = ret
     return ret
 
+def conjugateTranspose(operator_array: np.ndarray) -> np.ndarray:
+    """ Returns the Hermitian conjugate of an operator-valued array.
+
+    Transposes ``operator_array`` and replaces each entry with its adjoint via
+    ``.dag()``. A quadratic form ``mdot(conjugateTranspose(v), A, v)`` built with a
+    real-symmetric ``A`` is then Hermitian by construction: it folds any numerical
+    non-Hermitian residue carried by the operators into a symmetric form rather than
+    preserving it.
+
+    :param operator_array: an object array whose entries expose a ``.dag()`` method.
+    """
+    transposed = np.asarray(operator_array, dtype=object).T
+    result = np.empty(transposed.shape, dtype=object)
+    for index in np.ndindex(transposed.shape):
+        result[index] = transposed[index].dag()
+    return result
+
 def hdot(m1, m2):
     """ Compute the Hadamard product of two matrices.
     
