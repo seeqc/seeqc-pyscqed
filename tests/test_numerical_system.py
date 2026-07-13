@@ -19,6 +19,20 @@ def get_single_node_graph() -> CircuitGraph:
     return graph
 
 
+def get_two_node_graph() -> CircuitGraph:
+    graph = CircuitGraph()
+    graph.addBranch(0, 1, "I1")
+    graph.addBranch(0, 1, "C1")
+    graph.addBranch(0, 1, "L1")
+    graph.addBranch(0, 2, "I2")
+    graph.addBranch(0, 2, "C2")
+    graph.addBranch(0, 2, "L2")
+    graph.addBranch(1, 2, "Cc")
+    graph.addFluxBias("I1", "Z1")
+    graph.addFluxBias("I2", "Z2")
+    return graph
+
+
 def get_numerical_system(graph: CircuitGraph) -> NumericalSystem:
     # NOTE: The system simulated here is not configured for generating representative physical results,
     # they are only there to check numerical consistency
@@ -78,7 +92,7 @@ def get_linear_hamiltonian(hamil: NumericalSystem, basis_transform: bool) -> qt.
     # Get flux energy
     Hf = hamil.units.getPrefactor("El")*0.5*\
     mdot(P.T, hamil.state.getInverseInductanceMatrix(), P)[0, 0]
-    
+
     return Hq + Hf
 
 
@@ -496,3 +510,32 @@ def test_spectrum_bias_independence(basis):
 
     H = get_linear_hamiltonian(hamil, basis_transform=False)
     assert np.isclose(qt.expect(H, V1[0]) - E1[0], energy_offset, atol=1e-5, rtol=0)
+
+
+def test_two_node_hamiltonian_with_flux_bias():
+    # Two capacitively coupled nodes, each with a flux-biased loop. Exercises the
+    # multi-node biased operator path with non-zero flux bias on both nodes.
+    hamil = NumericalSystem(SymbolicSystem(get_two_node_graph()))
+    trunc = 5
+    hamil.configureOperator(1, trunc, "charge")
+    hamil.configureOperator(2, trunc, "charge")
+    hamil.setParameterValues(
+        "C1", 20.0,   # fF
+        "I1", 40e-3,  # uA
+        "L1", 50.0,   # pH
+        "C2", 20.0,
+        "I2", 40e-3,
+        "L2", 50.0,
+        "Cc", 2.0,
+        "phiZ1", 0.1,   # phi0
+        "phiZ2", 0.3,  # phi0
+    )
+    H = hamil.getHamiltonian()
+
+    # Charge basis dimension is 2*trunc + 1 per node
+    dim = (2 * trunc + 1) ** 2
+    assert H.shape == (dim, dim)
+
+    # The biased operators are a unitary similarity transform of Hermitian
+    # operators, so the Hamiltonian must remain Hermitian
+    assert H.isherm

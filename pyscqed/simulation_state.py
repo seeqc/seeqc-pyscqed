@@ -165,29 +165,30 @@ class CircuitOperators:
         # Generate the Hilbert space expanders
         Ilist = [self._operator_data[node].getIdentity() for node in self._node_list]
 
+        self.charge_op_vector = np.empty((len(self._node_list), 1), dtype=object)
+        self.flux_op_vector = np.empty((len(self._node_list), 1), dtype=object)
         for i, node in enumerate(self._node_list):
-            # Ignore nodes that are not in the list, if provided
-            if nodes is not None and node not in nodes:
-                continue
+            # Regenerate the nodes in the list, if provided; skipped nodes keep their
+            # existing expanded operators
+            if nodes is None or node in nodes:
+                ops = self._operator_data[node]
+                ops.generate(symbolic_system, units)
 
-            ops = self._operator_data[node]
-            ops.generate(symbolic_system, units)
+                Olist = list(Ilist)
+                op_dict = {}
+                Olist[i] = ops.Q
+                op_dict["charge"] = qt.tensor(Olist)
+                Olist[i] = ops.P
+                op_dict["flux"] = qt.tensor(Olist)
+                Olist[i] = ops.D
+                op_dict["disp"] = qt.tensor(Olist)
+                Olist[i] = ops.Ddag
+                op_dict["disp_adj"] = qt.tensor(Olist)
+                self._circ_operators[node] = op_dict
 
-            Olist = list(Ilist)
-            op_dict = {}
-            Olist[i] = ops.Q
-            op_dict["charge"] = qt.tensor(Olist)
-            Olist[i] = ops.P
-            op_dict["flux"] = qt.tensor(Olist)
-            Olist[i] = ops.D
-            op_dict["disp"] = qt.tensor(Olist)
-            Olist[i] = ops.Ddag
-            op_dict["disp_adj"] = qt.tensor(Olist)
-            self._circ_operators[node] = op_dict
-
-        # Collect the operator vectors in node order
-        self.charge_op_vector = self._collect_operator_vector("charge")
-        self.flux_op_vector = self._collect_operator_vector("flux")
+            # Collect the operator vectors in node order
+            self.charge_op_vector[i, 0] = self._circ_operators[node]["charge"]
+            self.flux_op_vector[i, 0] = self._circ_operators[node]["flux"]
         self.generation += 1
 
     def generateExpandedShiftingUnitaries(
@@ -208,12 +209,6 @@ class CircuitOperators:
             Olist[i] = U.dag()
             vector2[i, 0] = qt.tensor(Olist)
         return vector1, vector2
-
-    def _collect_operator_vector(self, key: str) -> np.ndarray:
-        vector = np.empty((len(self._node_list), 1), dtype=object)
-        for i, node in enumerate(self._node_list):
-            vector[i, 0] = self._circ_operators[node][key]
-        return vector
 
     def regenerateDependentOperators(
         self,
@@ -288,14 +283,14 @@ class SimulationState:
     def getBiasedChargeOperatorVector(self) -> np.ndarray:
         """ Returns the node charge operator vector including the charge bias offsets. """
         U, Udag = self._getShiftingUnitaries()
-        Q = util.mdot(U, self.circuit_operators.charge_op_vector, Udag)
+        Q = U * self.circuit_operators.charge_op_vector * Udag
         return Q
 
     def getBiasedFluxOperatorVector(self) -> np.ndarray:
         """ Returns the node flux operator vector including the inductive flux bias
         offsets. """
         U, Udag = self._getShiftingUnitaries()
-        P = util.mdot(U, self.circuit_operators.flux_op_vector, Udag)
+        P = U * self.circuit_operators.flux_op_vector * Udag
         return P
 
     def getInverseCapacitanceMatrix(self) -> np.ndarray:

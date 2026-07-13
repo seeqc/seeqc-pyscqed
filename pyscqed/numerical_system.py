@@ -189,11 +189,11 @@ class NumericalSystem(TempData):
 
         # Get charging energy
         Hq = self.units.getPrefactor("Ec")*0.5*\
-        util.mdot(Q.T, self.state.getInverseCapacitanceMatrix(), Q)[0, 0]
+        util.mdot(util.conjugateTranspose(Q), self.state.getInverseCapacitanceMatrix(), Q)[0, 0]
 
         # Get flux energy
         Hf = self.units.getPrefactor("El")*0.5*\
-        util.mdot(P.T, self.state.getInverseInductanceMatrix(), P)[0, 0]
+        util.mdot(util.conjugateTranspose(P), self.state.getInverseInductanceMatrix(), P)[0, 0]
 
         # Need the branch DoFs in the possibly transformed representation
         Pp = self.SS.Rnb*self.SS.Rinv*self.SS.node_vector
