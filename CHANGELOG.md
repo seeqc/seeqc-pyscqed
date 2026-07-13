@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.14.0] - NA
 
+### Added
+- Basis transformation to shift circuit operators to bias operating points.
+
 ### Changed
 - Sweeping system overhauled with a new reliable API.
 - Input types for some functions.
@@ -19,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - Unfinished features that were unusable
+- Small error traces in the hamiltonians of multi-node circuits
 
 ## [0.13.0] - 2024-07-23
 
