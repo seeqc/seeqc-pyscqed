@@ -3,6 +3,7 @@ import sympy as sy
 import numpy as np
 import copy
 import warnings
+from dataclasses import dataclass
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 from .circuit_graph import CircuitGraph, CircuitGraphEdge
@@ -10,6 +11,82 @@ from .parameter_collection import ParamCollection
 
 
 _DOF_PREFIX = ["\\Phi", "\\phi", "Q", "q"]
+
+
+@dataclass
+class _FluxBias:
+    """Symbolic metadata describing the flux bias terms of a circuit."""
+
+    bias: dict[CircuitGraphEdge, sy.Expr]
+    prefactor: dict[CircuitGraphEdge, float]
+    red_bias: dict[CircuitGraphEdge, sy.Expr]
+    exp_bias: dict[CircuitGraphEdge, sy.Expr]
+    names: dict[str, CircuitGraphEdge]
+    parameter_symbols: dict[str, sy.Symbol]
+
+    @classmethod
+    def from_circuit_graph(
+        cls,
+        graph: CircuitGraph,
+        flux_prefix: str = _DOF_PREFIX[0],
+        redflux_prefix: str = _DOF_PREFIX[1],
+    ) -> "_FluxBias":
+        """Build flux bias metadata for the spanning-tree branches of ``graph``."""
+        edges = list(graph.sc_spanning_tree_wc.edges)
+        instance = cls(
+            bias={edge: 0.0 for edge in edges},
+            prefactor={edge: 1.0 for edge in edges},
+            red_bias={edge: 0.0 for edge in edges},
+            exp_bias={edge: 1.0 for edge in edges},
+            names={},
+            parameter_symbols={},
+        )
+        for edge, data in graph.flux_bias_edges.items():
+            suffix = data["suffix"]
+            instance.bias[edge] += sy.symbols("%s_{%s}" % (flux_prefix, suffix))
+            instance.red_bias[edge] += sy.symbols("%s_{%s}" % (redflux_prefix, suffix))
+            instance.exp_bias[edge] *= sy.symbols(
+                "e^{i%s_{%s}}" % (redflux_prefix, suffix)
+            )
+            instance.names["phi%s" % suffix] = edge
+            instance.parameter_symbols["phi%s" % suffix] = \
+                sy.symbols("%s_{%s}" % (flux_prefix, suffix))
+        return instance
+
+
+@dataclass
+class _ChargeBias:
+    """Symbolic metadata describing the charge bias terms of a circuit."""
+
+    bias: dict[int, sy.Expr]
+    red_bias: dict[int, sy.Expr]
+    names: dict[str, int]
+    parameter_symbols: dict[str, sy.Symbol]
+
+    @classmethod
+    def from_circuit_graph(
+        cls,
+        graph: CircuitGraph,
+        charge_prefix: str = _DOF_PREFIX[2],
+        redcharge_prefix: str = _DOF_PREFIX[3],
+    ) -> "_ChargeBias":
+        """Build charge bias metadata for the non-ground nodes of ``graph``."""
+        nodes = list(graph.circuit_graph.nodes)
+        nodes.remove(0)
+        instance = cls(
+            bias={node: 0.0 for node in nodes},
+            red_bias={node: 0.0 for node in nodes},
+            names={},
+            parameter_symbols={},
+        )
+        for node, data in graph.charge_bias_nodes.items():
+            suffix = data["suffix"]
+            instance.bias[node] = sy.symbols("%s_{%s}" % (charge_prefix, suffix))
+            instance.red_bias[node] = sy.symbols("%s_{%s}" % (redcharge_prefix, suffix))
+            instance.names["%s%s" % (charge_prefix, suffix)] = node
+            instance.parameter_symbols["%s%s" % (charge_prefix, suffix)] = \
+                sy.symbols("%s_{%s}" % (charge_prefix, suffix))
+        return instance
 
 
 class SymbolicSystem(ParamCollection):
@@ -48,19 +125,7 @@ class SymbolicSystem(ParamCollection):
         self.redflux_prefix = _DOF_PREFIX[1]
         self.charge_prefix = _DOF_PREFIX[2]
         self.redcharge_prefix = _DOF_PREFIX[3]
-        
-        # Flux and Charge bias terms
-        self.flux_bias = {}
-        self.flux_bias_prefactor = {}
-        self.red_flux_bias = {}
-        self.exp_flux_bias = {}
-        self.charge_bias = {}
-        self.red_charge_bias = {}
-        
-        # Flux and Charge bias names (name -> edge)
-        self.flux_bias_names = {}
-        self.charge_bias_names = {}
-        
+
         # Create the circuit parameters
         self._create_circuit_symbols()
         self._create_flux_bias_symbols()
@@ -97,10 +162,10 @@ class SymbolicSystem(ParamCollection):
         bias_vec = list(np.zeros(self.Nn))
         if form == "charge":
             for i, node in enumerate(self.nodes):
-                bias_vec[i] = self.charge_bias[node]
+                bias_vec[i] = self.charge_bias.bias[node]
         elif form == "phase":
             for i, node in enumerate(self.nodes):
-                bias_vec[i] = self.red_charge_bias[node]
+                bias_vec[i] = self.charge_bias.red_bias[node]
         return sy.Matrix(bias_vec)
 
     def getCapacitanceMatrix(self, parameterise: bool = True) -> sy.Matrix:
@@ -216,44 +281,18 @@ class SymbolicSystem(ParamCollection):
     def getCurrentVector(self, mode: str = "node") -> sy.Matrix:
         return sy.Matrix([sy.symbols("I_{%i}" % node) for node in self.nodes])
     
-    def moveFluxBias(self, orig_edge: CircuitGraphEdge, new_edge: CircuitGraphEdge) -> None:
-        if orig_edge not in self.edges:
-            raise Exception("Edge %s not part of the conductive circuit subgraph." % repr(orig_edge))
-        if new_edge not in self.edges:
-            raise Exception("Edge %s not part of the conductive circuit subgraph." % repr(new_edge))
-        
-        # Check the original edge has a flux bias term
-        if self.flux_bias[orig_edge] == 0.0:
-            raise Exception("Edge %s does not contain a flux bias term." % repr(orig_edge))
-        
-        # Check both edges are part of the same loop
-        
-        
-        # FIXME: What if there are multiple bias terms on the edge?
-        expr = self.flux_bias[orig_edge]
-        self.flux_bias[orig_edge] = 0.0
-        self.flux_bias[new_edge] = expr
-        
-        expr = self.red_flux_bias[orig_edge]
-        self.red_flux_bias[orig_edge] = 0.0
-        self.red_flux_bias[new_edge] = expr
-        
-        if self.CG.isInductiveEdge(new_edge):
-            print("WARNING: Flux bias %s is on an inductive edge, and thus a suitable basis must be used." % (repr(expr)))
-        print("Flux bias term %s is on edge %s (%s)." % (repr(expr), repr(new_edge), self.CG.components_map[new_edge]))
-    
     def getFluxBiasVector(self, mode: str = "node", form: str = "flux") -> sy.Matrix | None:
         bias_vec = list(np.zeros(self.Nb))
         if form == "flux":
             for i, edge in enumerate(self.edges):
                 if self.CG.isJosephsonEdge(edge):
-                    bias_vec[i] = self.flux_bias_prefactor[edge]*self.flux_bias[edge]
+                    bias_vec[i] = self.flux_bias.prefactor[edge]*self.flux_bias.bias[edge]
                 else:
                     bias_vec[i] = 0.0
         elif form == "phase":
             for i, edge in enumerate(self.edges):
                 if self.CG.isJosephsonEdge(edge):
-                    bias_vec[i] = self.flux_bias_prefactor[edge]*self.red_flux_bias[edge]
+                    bias_vec[i] = self.flux_bias.prefactor[edge]*self.flux_bias.red_bias[edge]
                 else:
                     bias_vec[i] = 0.0
         if mode == "node":
@@ -268,7 +307,7 @@ class SymbolicSystem(ParamCollection):
         bias_vec = list(np.zeros(self.Nb))
         for i, edge in enumerate(self.edges):
             if self.CG.isInductiveEdge(edge):
-                bias_vec[i] = self.flux_bias_prefactor[edge]*self.flux_bias[edge]
+                bias_vec[i] = self.flux_bias.prefactor[edge]*self.flux_bias.bias[edge]
             else:
                 bias_vec[i] = 0.0
         
@@ -611,38 +650,15 @@ class SymbolicSystem(ParamCollection):
             self.addParameterisation(self.CG.resonators_cap[node]["gC"], gC)
 
     def _create_flux_bias_symbols(self) -> None:
-        # First add empty flux bias placeholders
-        for edge in self.edges:
-            self.flux_bias_prefactor[edge] = 1.0
-            self.flux_bias[edge] = 0.0
-            self.red_flux_bias[edge] = 0.0
-            self.exp_flux_bias[edge] = 1.0
-
-        # Iterate through the user selected flux biased edges
-        for edge in self.CG.flux_bias_edges:
-            suffix = self.CG.flux_bias_edges[edge]["suffix"]
-            self.flux_bias[edge] += sy.symbols("%s_{%s}" % (self.flux_prefix, suffix))
-            self.flux_bias_names["phi%s" % suffix] = edge
-            self.red_flux_bias[edge] += sy.symbols("%s_{%s}" % (self.redflux_prefix, suffix))
-            self.exp_flux_bias[edge] *= sy.symbols("e^{i%s_{%s}}" % (self.redflux_prefix, suffix))
-            self.addParameter(
-                "phi%s" % suffix,
-                sy.symbols("%s_{%s}" % (self.flux_prefix, suffix))
-            )
+        self.flux_bias = _FluxBias.from_circuit_graph(
+            self.CG, self.flux_prefix, self.redflux_prefix
+        )
+        for name, symbol in self.flux_bias.parameter_symbols.items():
+            self.addParameter(name, symbol)
 
     def _create_charge_bias_symbols(self) -> None:
-        # First add empty charge bias placeholders
-        for node in self.nodes:
-            self.charge_bias[node] = 0.0
-            self.red_charge_bias[node] = 0.0
-
-        # Iterate through the user selected charge biased nodes
-        for node in self.CG.charge_bias_nodes:
-            suffix = self.CG.charge_bias_nodes[node]["suffix"]
-            self.charge_bias[node] = sy.symbols("%s_{%s}" % (self.charge_prefix, suffix))
-            self.charge_bias_names["%s%s" % (self.charge_prefix, suffix)] = node
-            self.red_charge_bias[node] = sy.symbols("%s_{%s}" % (self.redcharge_prefix, suffix))
-            self.addParameter(
-                "%s%s" % (self.charge_prefix, suffix),
-                sy.symbols("%s_{%s}" % (self.charge_prefix, suffix))
-            )
+        self.charge_bias = _ChargeBias.from_circuit_graph(
+            self.CG, self.charge_prefix, self.redcharge_prefix
+        )
+        for name, symbol in self.charge_bias.parameter_symbols.items():
+            self.addParameter(name, symbol)
