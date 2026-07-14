@@ -282,3 +282,41 @@ def test_mutual_inductance():
     # Cannot couple the same inductors twice
     with pytest.raises(ValueError):
         graph.coupleBranchesInductively("L1", "L2", "M4")
+
+
+def test_loop_biases_irreducible_paths():
+    graph = CircuitGraph()
+    graph.addBranch(0, 1, "CL")
+    graph.addBranch(0, 2, "CI")
+    graph.addBranch(0, 7, "CR")
+    graph.addBranch(1, 7, "Ll")
+    graph.addBranch(1, 4, "LBL")
+    graph.addBranch(1, 3, "LTL")
+    graph.addBranch(7, 6, "LBR")
+    graph.addBranch(7, 5, "LTR")
+    graph.addBranch(2, 4, "IBL")
+    graph.addBranch(2, 3, "ITL")
+    graph.addBranch(2, 6, "IBR")
+    graph.addBranch(2, 5, "ITR")
+    graph.addFluxBias("ITL", "L")
+    graph.addFluxBias("ITR", "R")
+    graph.addFluxBias("Ll", "Z")
+
+    print(graph.loop_biases)
+
+
+def test_loop_biases_parallel_junctions():
+    graph = CircuitGraph()
+    graph.addBranch(0, 1, "C1")
+    graph.addBranch(0, 1, "I1")
+    graph.addBranch(1, 2, "C2a")
+    graph.addBranch(1, 2, "I2a")
+    graph.addBranch(1, 2, "C2b")
+    graph.addBranch(1, 2, "I2b")
+    graph.addBranch(1, 2, "Csh")
+    graph.addBranch(0, 2, "C3")
+    graph.addBranch(0, 2, "I3")
+    graph.addFluxBias("I3", "Z")
+    graph.addFluxBias("I2a", "X")
+
+    print(graph.loop_biases)

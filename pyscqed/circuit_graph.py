@@ -68,6 +68,9 @@ class CircuitGraph:
         # General undirected circuit graph
         self.circuit_graph = nx.MultiGraph(circuit_name=circuit_name)
 
+        # Gauge-invariant phase for all paths
+        self.loop_biases = {}
+
     def addBranch(self, n1: int, n2: int, component: str) -> None:
         """ Adds a branch between two circuit nodes that contains a single component.
         """
@@ -87,6 +90,7 @@ class CircuitGraph:
         self._update_components_map()
         self._update_graphs()
         self._update_couplings_map((n1, n2, k))
+        self._update_flux_phase_paths()
 
     def coupleBranchesInductively(self, inductor1: str, inductor2: str, mutual_inductance: str) -> None:
         """ Couples two branches inductively.
@@ -211,6 +215,7 @@ class CircuitGraph:
             "mutual_inductance": mutual_inductance,
             "suffix": suffix
         }
+        self._update_flux_phase_paths()
 
     def addChargeBias(self, node: int, suffix: str, coupling_capacitance: str | None = None) -> None:
         """ Adds a charge bias term to the specified node.
@@ -470,29 +475,50 @@ class CircuitGraph:
                 self.sc_spanning_tree_wc.add_edge(edge[0], edge[1], key=edge[2], edge_type="C", label=label)
 
     def _get_sc_loops(self) -> None:
-        c = 0
         self.sc_loops = {}
-        self.loop_closures = {}
-        for source_node, spanning in self.virtual_grounds.items():
-            closure_edges, S = spanning
-
-            for edge in closure_edges:
-                self.sc_loops[c] = []
-                try:
-                    p1 = sorted(nx.all_simple_edge_paths(S, source_node, edge[0]))[0]
-                    p2 = sorted(nx.all_simple_edge_paths(S, source_node, edge[1]))[0]
-                    self.sc_loops[c].extend(list(set(p1)^set(p2)))
-                except IndexError:
-                    self.sc_loops[c].extend(list(p1))
-
-                self.sc_loops[c].append(edge)
-                self.loop_closures[c] = edge
-                c+=1
+        self.spanning_edges_map = {}
+        self.spanning_edges_map.update({(edge[0], edge[1]): edge for edge in set(self.sc_spanning_tree.edges)})
+        self.spanning_edges_map.update({(edge[1], edge[0]): edge for edge in set(self.sc_spanning_tree.edges)})
+        self.conductive_spanning_tree = nx.minimum_spanning_tree(self.circuit_conductive_graph)
+        for idx, edge in enumerate(self.closure_branches):
+            self.sc_loops[idx] = [edge]
+            walk = nx.shortest_path(self.conductive_spanning_tree, edge[1], edge[0])
+            edges = [
+                self.spanning_edges_map[
+                    (walk[idx1], walk[idx1 + 1])
+                ]
+                for idx1 in range(len(walk) - 1)
+            ]
+            self.sc_loops[idx].extend(edges)
 
     def _get_closure_branches(self) -> None:
         self.closure_branches = []
         for closure_edges, S in self.virtual_grounds.values():
             self.closure_branches.extend(closure_edges)
+
+    def _update_flux_phase_paths(self) -> None:
+        # A user-added flux bias on a branch will be labelled to flow with the
+        # order the nodes are defined for the branch
+        biased_edges = {(edge[0], edge[1]) for edge in set(self.flux_bias_edges)}
+        biased_edges |= {(edge[1], edge[0]) for edge in set(self.flux_bias_edges)}
+
+        def is_bias_edge(edge):
+            if edge in biased_edges:
+                return (1, self.spanning_edges_map[edge])
+            return None
+
+        # For each irreducible loop, we add or subtract the fluxes that appear along the path
+        # The first flux is the labelled term, and the additional fluxes are to be added to that term
+        self.loop_biases = {idx: [] for idx in range(len(self.closure_branches))}
+        for idx, edge in enumerate(self.closure_branches):
+            if edge in set(self.flux_bias_edges):
+                self.loop_biases[idx].append((1, edge))
+            walk = nx.shortest_path(self.conductive_spanning_tree, edge[1], edge[0])
+            edges = [(walk[idx1], walk[idx1 + 1]) for idx1 in range(len(walk) - 1)]
+            for path_edge in edges:
+                result = is_bias_edge(path_edge)
+                if result is not None:
+                    self.loop_biases[idx].append(result)
 
     def _get_loop_graph(self) -> None:
         loop_graph_nodes = {}
